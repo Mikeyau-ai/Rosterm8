@@ -99,7 +99,25 @@ output; `tests/scheduler.test.mjs` is the ported test suite that proves it.
 
 ```bash
 node --test tests/scheduler.test.mjs
+node --test tests/sync.test.mjs
 ```
+
+## Sync (optional)
+
+By default nothing leaves the device. If a sync server is configured in
+`js/config.js`, **Settings → Sync** appears and your rosters follow you between
+devices.
+
+Everything is encrypted on the device first, so the server stores bytes it
+cannot read — including by whoever runs it. Turning sync on gives you a **sync
+code**; entering that code on another device pulls the data down.
+
+**Lose the code and the data is gone.** Nobody can recover it, because nobody
+else has ever held the key. That is the price of the server genuinely not being
+able to read what it holds, and the app says so next to the code.
+
+See `worker/README.md` to deploy the server, or leave `SYNC_URL` empty and the
+feature does not exist.
 
 ## The AI bit is optional
 
@@ -142,6 +160,7 @@ the same reason — offline is verified against the deployed site.
 | Storage + backup | `js/store.js` |
 | AI assist | `js/ai.js` |
 | Shared widgets | `js/ui.js` |
+| Encrypted sync | `js/sync.js`, `js/config.js`, `worker/` |
 | Home-screen install | `js/install.js` |
 | Screens | `js/views/*.js` |
 | Offline | `sw.js`, `manifest.webmanifest` |
