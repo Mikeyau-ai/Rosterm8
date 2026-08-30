@@ -160,8 +160,16 @@ function registerWorker() {
 function init() {
   store.load();
 
-  // Push an encrypted copy shortly after any change, when sync is switched on.
-  store.onSaved((data) => sync.schedulePush(data));
+  // Sync is on unless the user has turned it off. Enabling it uploads what is
+  // already here rather than replacing it, so switching on never costs anyone
+  // the rosters they already had.
+  sync.autoEnable();
+
+  // Every save marks the device as having moved on, and queues an upload.
+  store.onSaved((data) => {
+    sync.markChanged();
+    sync.schedulePush(data);
+  });
   refreshOrgs();
 
   for (const tab of document.querySelectorAll('.tab')) {
@@ -172,6 +180,27 @@ function init() {
 
   show(location.hash.slice(1) || 'roster');
   registerWorker();
+  startSync();
+}
+
+/**
+ * Catch up with the server once the screen is already usable.
+ *
+ * Deliberately after the first render and never awaited: the device's own copy
+ * is enough to work from, so nobody should be looking at a spinner while a
+ * request completes - least of all on a bad connection.
+ */
+async function startSync() {
+  const result = await sync.reconcile(store.data, (serverData) => {
+    store.replaceAll(serverData);
+    refreshOrgs();
+    render();
+  });
+
+  if (result.action === 'downloaded') toast('Updated from your other device');
+  if (result.action === 'conflict') {
+    toast('This and another device both changed things — kept what is on this one');
+  }
 }
 
 init();

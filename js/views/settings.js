@@ -431,6 +431,7 @@ function renderSyncCard(container) {
       className: 'btn btn-primary btn-block', textContent: 'Turn on sync',
       onclick: async () => {
         const fresh = sync.generateCode();
+        sync.setDisabled(false);
         sync.setCode(fresh);
         try {
           await sync.push(store.data, fresh);
@@ -461,6 +462,7 @@ function renderSyncCard(container) {
           );
           if (!ok) return;
           store.importJSON(JSON.stringify(result.data));
+          sync.setDisabled(false);
           sync.setCode(entered);
           refreshOrgs();
           toast('Synced from your other device');
@@ -497,6 +499,14 @@ function renderSyncCard(container) {
           + 'else has ever had it.',
       }),
     ]),
+    sync.codeAcknowledged() ? null : el('button', {
+      className: 'btn btn-primary btn-block', textContent: 'I have written it down',
+      onclick: () => {
+        sync.acknowledgeCode();
+        toast('Thanks — that reminder will stop now');
+        redraw();
+      },
+    }),
     el('div', { className: 'row' }, [
       el('button', {
         className: 'btn', textContent: 'Copy code', onclick: () => copyText(shown),
@@ -526,6 +536,9 @@ function renderSyncCard(container) {
         );
         if (!ok) return;
         sync.setCode(null);
+        // Remember the choice: without this, the next launch would helpfully
+        // switch sync straight back on again.
+        sync.setDisabled(true);
         toast('Sync off');
         redraw();
       },

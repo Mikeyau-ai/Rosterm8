@@ -175,12 +175,25 @@ function renderNameCard(person) {
 
 /** Card: the weekday picker for standing availability. */
 function renderAvailabilityCard(person, container) {
+  const hint = el('div', { className: 'faint' });
+
+  /** Say plainly when nobody has picked any days yet. */
+  const refreshHint = (days) => {
+    hint.textContent = days.length === 0
+      ? 'No days ticked, so they will not be rostered. Tap the days they can work.'
+      : '';
+  };
+
   const picker = weekdayPicker(person.availableWeekdays, (days) => {
     store.updatePerson(person.id, { availableWeekdays: days });
+    refreshHint(days);
   });
+  refreshHint(person.availableWeekdays);
+
   return el('div', { className: 'card' }, [
     el('label', { className: 'label', textContent: 'Available on' }),
     picker,
+    hint,
   ]);
 }
 

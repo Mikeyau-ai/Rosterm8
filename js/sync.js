@@ -26,6 +26,18 @@ import { SYNC_URL } from './config.js';
 /** localStorage key holding this device's sync secret. */
 const SECRET_KEY = 'rosterm8.sync.secret';
 
+/** Set when the user has deliberately turned sync off on this device. */
+const OFF_KEY = 'rosterm8.sync.off';
+
+/** Set once the user has confirmed they have written their code down. */
+const ACK_KEY = 'rosterm8.sync.ack';
+
+/** Server timestamp this device last agreed with. */
+const SYNCED_AT_KEY = 'rosterm8.sync.at';
+
+/** When this device last changed the data itself. */
+const CHANGED_AT_KEY = 'rosterm8.sync.changed';
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -149,6 +161,151 @@ export function setCode(code) {
   }
 }
 
+/** True when the user has switched sync off here and meant it. */
+export function isDisabled() {
+  try {
+    return localStorage.getItem(OFF_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Record (or clear) a deliberate decision to keep sync off on this device. */
+export function setDisabled(off) {
+  try {
+    if (off) localStorage.setItem(OFF_KEY, '1');
+    else localStorage.removeItem(OFF_KEY);
+  } catch { /* storage unavailable; sync simply stays off for this session */ }
+}
+
+/** True once the user has confirmed they have a copy of their sync code. */
+export function codeAcknowledged() {
+  try {
+    return localStorage.getItem(ACK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Record that the user has saved their code, so we stop asking. */
+export function acknowledgeCode() {
+  try {
+    localStorage.setItem(ACK_KEY, '1');
+  } catch { /* nothing to do; we will simply ask again next time */ }
+}
+
+/** Read a stored timestamp, or '' when there isn't one. */
+function stamp(key) {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** Write a stored timestamp. */
+function setStamp(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch { /* storage unavailable; reconciliation just re-runs next launch */ }
+}
+
+/** Note that this device has changed the data. Called on every save. */
+export function markChanged() {
+  setStamp(CHANGED_AT_KEY, new Date().toISOString());
+}
+
+/**
+ * Bring this device and the server into agreement, once, at startup.
+ *
+ * The server holds the authoritative copy; the device keeps its own so the app
+ * still opens and works with no signal. This decides which of the two moved on
+ * since they last agreed:
+ *
+ *   server newer, device unchanged  ->  take the server's copy
+ *   device newer, server unchanged  ->  upload
+ *   both changed                    ->  keep the device's, and say so
+ *
+ * The last case is the one that matters. Silently picking a winner is how
+ * somebody's afternoon of edits disappears without anyone noticing, so it
+ * keeps what is in front of the user and reports the clash instead.
+ *
+ * `apply(data)` is called with the server's copy when that is the one to keep.
+ */
+export async function reconcile(localData, apply) {
+  if (!isEnabled()) return { action: 'off' };
+
+  const syncedAt = stamp(SYNCED_AT_KEY);
+  const changedAt = stamp(CHANGED_AT_KEY);
+  const deviceMovedOn = Boolean(changedAt) && changedAt > syncedAt;
+
+  let remote;
+  try {
+    remote = await pull();
+  } catch (err) {
+    setStatus('error', err.message);
+    return { action: 'failed', message: err.message };
+  }
+
+  // Nothing stored yet: this device seeds it.
+  if (!remote) {
+    try {
+      const at = await push(localData);
+      setStamp(SYNCED_AT_KEY, at);
+      setStatus('synced');
+      return { action: 'uploaded' };
+    } catch (err) {
+      setStatus('error', err.message);
+      return { action: 'failed', message: err.message };
+    }
+  }
+
+  const serverMovedOn = Boolean(remote.updatedAt) && remote.updatedAt > syncedAt;
+
+  if (serverMovedOn && deviceMovedOn) {
+    setStatus('conflict', 'This device and another both changed things since they last agreed.');
+    return { action: 'conflict', at: remote.updatedAt };
+  }
+
+  if (serverMovedOn) {
+    apply(remote.data);
+    setStamp(SYNCED_AT_KEY, remote.updatedAt);
+    setStamp(CHANGED_AT_KEY, remote.updatedAt);
+    setStatus('synced');
+    return { action: 'downloaded' };
+  }
+
+  if (deviceMovedOn) {
+    try {
+      const at = await push(localData);
+      setStamp(SYNCED_AT_KEY, at);
+      setStatus('synced');
+      return { action: 'uploaded' };
+    } catch (err) {
+      setStatus('error', err.message);
+      return { action: 'failed', message: err.message };
+    }
+  }
+
+  setStatus('synced');
+  return { action: 'in-sync' };
+}
+
+/**
+ * Switch sync on by itself the first time the app runs on a device.
+ *
+ * On by default because the whole point is that a lost or wiped phone should
+ * not mean a lost roster, and something you have to go and find in Settings
+ * gets switched on after the data is already gone.
+ *
+ * It does not override a deliberate choice: once someone turns sync off, it
+ * stays off until they turn it back on. Returns true if it just enabled it.
+ */
+export function autoEnable() {
+  if (!isConfigured() || isDisabled() || currentCode()) return false;
+  return setCode(generateCode());
+}
+
 /** True when a server has been configured and this device has a code. */
 export function isEnabled() {
   return Boolean(SYNC_URL) && Boolean(currentCode());
@@ -206,7 +363,9 @@ export function schedulePush(data, delay = 3000) {
   setStatus('pending');
   pushTimer = setTimeout(async () => {
     try {
-      await push(data);
+      const at = await push(data);
+      // Record agreement, so the next launch knows this device is not ahead.
+      setStamp(SYNCED_AT_KEY, at);
       setStatus('synced');
     } catch (err) {
       setStatus('error', err.message);

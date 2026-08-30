@@ -15,6 +15,7 @@ globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
   setItem: (k, v) => mem.set(k, String(v)),
   removeItem: (k) => mem.delete(k),
+  clear: () => mem.clear(),
 };
 globalThis.btoa = (s) => Buffer.from(s, 'binary').toString('base64');
 globalThis.atob = (s) => Buffer.from(s, 'base64').toString('binary');
@@ -109,4 +110,46 @@ test('two different codes never collide', async () => {
     ids.add((await deriveKeys(generateCode())).storageId);
   }
   assert.equal(ids.size, 25);
+});
+
+test('sync switches itself on the first time, once only', async () => {
+  mem.clear();
+  const { autoEnable, currentCode, setCode, isConfigured } = await import('../js/sync.js');
+
+  if (!isConfigured()) {
+    // No server built in: there is nothing to switch on, and that is correct.
+    assert.equal(autoEnable(), false);
+    return;
+  }
+
+  assert.equal(autoEnable(), true, 'switches itself on for a new device');
+  const first = currentCode();
+  assert.ok(first, 'and leaves a code behind');
+
+  // The second launch must not mint a new code - that would orphan the data
+  // uploaded under the first one.
+  assert.equal(autoEnable(), false, 'does not run again');
+  assert.equal(currentCode(), first, 'and keeps the same code');
+  setCode(null);
+});
+
+test('a deliberate "off" is not undone by the next launch', async () => {
+  mem.clear();
+  const { setDisabled, isDisabled, autoEnable } = await import('../js/sync.js');
+
+  setDisabled(true);
+  assert.equal(isDisabled(), true);
+  assert.equal(autoEnable(), false, 'must respect the user turning it off');
+
+  setDisabled(false);
+  assert.equal(isDisabled(), false);
+});
+
+test('the code reminder stops once acknowledged', async () => {
+  mem.clear();
+  const { codeAcknowledged, acknowledgeCode } = await import('../js/sync.js');
+
+  assert.equal(codeAcknowledged(), false, 'asks by default');
+  acknowledgeCode();
+  assert.equal(codeAcknowledged(), true, 'and stops once told');
 });

@@ -46,6 +46,24 @@ export function render(container) {
  * beats a line in a README nobody reads.
  */
 function backupNudge() {
+  // Sync switches itself on, so the code can exist without the user ever
+  // having seen it - and it is the one thing that cannot be recovered. Ask
+  // until they say they have it.
+  if (sync.isEnabled() && !sync.codeAcknowledged()) {
+    return [el('div', { className: 'notice' }, [
+      el('strong', { textContent: 'Save your sync code' }),
+      el('div', {
+        textContent: 'Your rosters are backed up automatically, but the code that '
+          + 'unlocks them exists only on this device. Write it down and this will stop asking.',
+      }),
+      el('button', {
+        className: 'btn btn-sm', textContent: 'Show my code',
+        style: 'margin-top:.5rem',
+        onclick: () => show('settings', { section: 'sync' }),
+      }),
+    ])];
+  }
+
   // With sync on, the data is already off this device, so the warning below
   // would simply be untrue. Sync's own state is reported in Settings.
   if (sync.isEnabled()) return [];

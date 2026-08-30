@@ -153,6 +153,27 @@ export const store = {
     this._onSaved = fn;
   },
 
+  /**
+   * Adopt a whole database wholesale, e.g. the server's copy at startup.
+   *
+   * Writes without going through the save listener, because this data came
+   * *from* the server - re-uploading it would be a pointless round trip and
+   * would move the timestamp for no reason.
+   */
+  replaceAll(data) {
+    this.data = { ...emptyData(), ...data };
+    this.data.settings = { ...emptyData().settings, ...(data.settings || {}) };
+    this.data.version = Number(data.version) || 1;
+    migrate(this.data);
+    try {
+      localStorage.setItem(KEY, JSON.stringify(this.data));
+    } catch (err) {
+      console.error('Could not save the copy from the server.', err);
+      return false;
+    }
+    return true;
+  },
+
   // ---------------------------------------------------------- organisations --
   /** Every organisation, alphabetically. */
   orgs() {
@@ -279,12 +300,19 @@ export const store = {
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 
-  /** Add a person, available every day by default, and return them. */
+  /**
+   * Add a person with no days ticked, and return them.
+   *
+   * Deliberately nothing rather than everything: assuming a new person can
+   * work any day quietly puts them on shifts nobody agreed to. An empty
+   * pattern makes the roster say "not rostered - no days ticked", which is a
+   * question, where a wrong assumption is a mistake you only spot on the day.
+   */
   addPerson(name) {
     const person = {
       id: newId(), orgId: this.data.currentOrgId,
       name: name.trim(), active: true,
-      availableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      availableWeekdays: [],
       blackouts: [], requests: [], maxShifts: null, notes: '',
     };
     this.data.people.push(person);
