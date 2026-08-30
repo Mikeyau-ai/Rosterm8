@@ -476,7 +476,9 @@ function renderSyncCard(container) {
   }
 
   // Sync is on: show the code, and be blunt about what losing it means.
-  const codeBox = el('div', { className: 'sync-code mono', textContent: code });
+  // Grouped for the eye; the stored value stays stripped.
+  const shown = sync.formatCode(code);
+  const codeBox = el('div', { className: 'sync-code mono', textContent: shown });
   const state = sync.status.state === 'error'
     ? `Last sync failed: ${sync.status.message}`
     : sync.status.state === 'synced' ? 'Up to date.'
@@ -497,7 +499,7 @@ function renderSyncCard(container) {
     ]),
     el('div', { className: 'row' }, [
       el('button', {
-        className: 'btn', textContent: 'Copy code', onclick: () => copyText(code),
+        className: 'btn', textContent: 'Copy code', onclick: () => copyText(shown),
       }),
       el('button', {
         className: 'btn', textContent: 'Sync now',

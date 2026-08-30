@@ -11,4 +11,4 @@ compatibility_date = "2024-11-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "rosterm8"
-database_id = "PASTE_YOUR_DATABASE_ID_HERE"
+database_id = "c9f30187-1580-417f-a6e0-12b6c45cca3c"

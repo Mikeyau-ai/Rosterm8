@@ -92,7 +92,12 @@ export const store = {
   load() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) {
+      if (!raw) {
+        // Nothing stored: reset rather than leaving whatever happened to be in
+        // memory. Without this, loading after a wipe silently keeps the old
+        // data and the next save writes it straight back.
+        this.data = emptyData();
+      } else {
         const parsed = JSON.parse(raw);
         this.data = { ...emptyData(), ...parsed };
         this.data.settings = { ...emptyData().settings, ...(parsed.settings || {}) };

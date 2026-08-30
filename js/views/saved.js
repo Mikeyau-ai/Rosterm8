@@ -7,6 +7,7 @@ import { store } from '../store.js';
 import { formatTable, counts, formatDate } from '../scheduler.js';
 import { el, fill, toast, confirmDialog, copyText, emptyState } from '../ui.js';
 import { show } from '../app.js';
+import * as sync from '../sync.js';
 
 // Id of the saved roster currently open, or null when showing the list.
 let openId = null;
@@ -40,11 +41,14 @@ export function render(container) {
 /**
  * A reminder to export, shown on the list once a backup is overdue.
  *
- * Nothing syncs anywhere, so an export is the only thing between a cleared
- * browser and losing everything. Saying so once a month on the screen people
- * actually open beats a line in a README nobody reads.
+ * With sync switched off, an export is the only thing between a cleared
+ * browser and losing everything. Saying so on the screen people actually open
+ * beats a line in a README nobody reads.
  */
 function backupNudge() {
+  // With sync on, the data is already off this device, so the warning below
+  // would simply be untrue. Sync's own state is reported in Settings.
+  if (sync.isEnabled()) return [];
   if (!store.backupOverdue()) return [];
   const days = store.daysSinceBackup();
 

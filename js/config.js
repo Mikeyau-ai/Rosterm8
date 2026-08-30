@@ -13,4 +13,4 @@
  *
  * Example: 'https://rosterm8-sync.your-name.workers.dev'
  */
-export const SYNC_URL = '';
+export const SYNC_URL = 'https://rosterm8-sync.mikey-257.workers.dev';

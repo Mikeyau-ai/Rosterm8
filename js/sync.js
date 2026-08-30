@@ -65,6 +65,17 @@ export function normaliseCode(code) {
   return String(code || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/**
+ * Re-group a code into fours for display.
+ *
+ * Codes are stored stripped, because that is what the key derivation uses -
+ * but an unbroken twenty-character string is exactly what someone copying it
+ * onto a second phone will get wrong. Grouping is put back for the eye.
+ */
+export function formatCode(code) {
+  return (normaliseCode(code).match(/.{1,4}/g) || []).join('-');
+}
+
 /** Generate a new random sync code. */
 export function generateCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(20));
