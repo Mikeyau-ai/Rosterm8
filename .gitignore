@@ -1,0 +1,10 @@
+# Python leftovers from the retired desktop app
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db

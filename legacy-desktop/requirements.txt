@@ -1,0 +1,10 @@
+# Rosterm8 - local Windows staff roster builder
+customtkinter==5.2.2
+Pillow>=10.0.0
+requests>=2.31.0
+python-dateutil>=2.9.0
+keyring>=25.0.0
+
+# The AI availability parser is called over plain REST via `requests` - no
+# vendor SDKs needed. Supported: Google Gemini, Anthropic Claude, OpenAI, and
+# any OpenAI-compatible endpoint (OpenRouter, Groq, Ollama, LM Studio, ...).

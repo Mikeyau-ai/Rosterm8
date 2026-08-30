@@ -1,0 +1,362 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Rosterm8 — mobile-first stylesheet.
+
+   Carries the desktop app's family palette (RamBo near-black, Rosterm8 purple)
+   into the browser, with a full light theme because this gets used on a phone
+   in daylight. Everything is token-driven so both themes stay in step.
+
+   System fonts throughout, deliberately: this is an offline-first installed app
+   and a webfont request would block first paint on a bad connection.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg:        #121212;
+  --surface:   #191819;
+  --surface-2: #201f21;
+  --raised:    #2a282c;
+  --line:      #2e2c30;
+  --ink:       #e6e3e8;
+  --ink-dim:   #9b95a1;
+  --ink-faint: #6a6470;
+
+  --accent:    #b06ed8;
+  --accent-in: #17101c;   /* text on an accent fill */
+  --accent-lo: #2a1f33;
+
+  --ok:        #5cc561;
+  --warn:      #e0a040;
+  --bad:       #e05252;
+
+  --radius:  10px;
+  --radius-s: 7px;
+  --tap:     44px;        /* minimum comfortable touch target */
+  --maxw:    56rem;
+
+  --shadow: 0 6px 24px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:        #f4f2f7;
+    --surface:   #ffffff;
+    --surface-2: #f0ecf4;
+    --raised:    #e7e1ee;
+    --line:      #ded8e4;
+    --ink:       #201d24;
+    --ink-dim:   #5d5566;
+    --ink-faint: #857d8f;
+    --accent:    #7b3fa0;
+    --accent-in: #ffffff;
+    --accent-lo: #f2e9f8;
+    --ok:        #2f8a44;
+    --warn:      #9a6410;
+    --bad:       #b8332f;
+    --shadow: 0 6px 24px rgba(40,25,55,.14);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg:        #f4f2f7;
+  --surface:   #ffffff;
+  --surface-2: #f0ecf4;
+  --raised:    #e7e1ee;
+  --line:      #ded8e4;
+  --ink:       #201d24;
+  --ink-dim:   #5d5566;
+  --ink-faint: #857d8f;
+  --accent:    #7b3fa0;
+  --accent-in: #ffffff;
+  --accent-lo: #f2e9f8;
+  --ok:        #2f8a44;
+  --warn:      #9a6410;
+  --bad:       #b8332f;
+  --shadow: 0 6px 24px rgba(40,25,55,.14);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+h1, h2, h3 { margin: 0; line-height: 1.25; text-wrap: balance; }
+h2 { font-size: 1.15rem; font-weight: 650; }
+h3 { font-size: .95rem; font-weight: 650; }
+p  { margin: 0 0 .75rem; }
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── app bar ─────────────────────────────────────────────────────────── */
+.appbar {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding-top: env(safe-area-inset-top);
+}
+.appbar-inner {
+  max-width: var(--maxw); margin: 0 auto;
+  display: flex; align-items: center; gap: .75rem;
+  padding: .6rem .9rem;
+}
+.brand { display: flex; align-items: center; gap: .55rem; flex: none; }
+.brand-tile {
+  width: 26px; height: 26px; border-radius: 6px; background: var(--accent);
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5px;
+  padding: 5px 4px 4px;
+}
+.brand-tile i { background: #fff; opacity: .45; border-radius: 1px; }
+.brand-tile i:nth-child(1), .brand-tile i:nth-child(5) { opacity: 1; }
+.brand-name { font-weight: 750; letter-spacing: .04em; font-size: .82rem; }
+
+.org-switch { margin-left: auto; min-width: 0; }
+.org-switch select {
+  width: 100%; max-width: 15rem;
+  min-height: 36px; padding: .3rem 1.9rem .3rem .6rem;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  font: inherit; font-size: .9rem;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 1rem center, right .72rem center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+}
+
+/* ── view area ───────────────────────────────────────────────────────── */
+.view {
+  max-width: var(--maxw); margin: 0 auto;
+  padding: 1rem .9rem calc(5.5rem + env(safe-area-inset-bottom));
+  outline: none;
+}
+.view > * + * { margin-top: 1rem; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+.card > * + * { margin-top: .8rem; }
+.card-head { display: flex; align-items: center; gap: .6rem; }
+.card-head h2 { flex: 1; min-width: 0; }
+
+.muted { color: var(--ink-dim); font-size: .9rem; }
+.faint { color: var(--ink-faint); font-size: .85rem; }
+.label {
+  display: block; font-size: .78rem; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-faint); margin-bottom: .35rem;
+}
+
+/* ── controls ────────────────────────────────────────────────────────── */
+input[type="text"], input[type="date"], input[type="number"],
+input[type="password"], input[type="time"], select, textarea {
+  width: 100%; min-width: 0; min-height: var(--tap);
+  padding: .55rem .7rem;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  font: inherit; font-size: 1rem;   /* 16px stops iOS zooming on focus */
+}
+textarea { min-height: 5.5rem; resize: vertical; line-height: 1.45; }
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  min-height: var(--tap); padding: .5rem 1rem;
+  background: var(--raised); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  font: inherit; font-size: .95rem; font-weight: 600;
+  cursor: pointer; text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn-primary { background: var(--accent); color: var(--accent-in); border-color: transparent; }
+.btn-danger  { background: transparent; color: var(--bad); border-color: var(--bad); }
+.btn-ghost   { background: transparent; }
+.btn-block   { width: 100%; }
+.btn-sm      { min-height: 34px; padding: .25rem .6rem; font-size: .85rem; }
+.btn-lg      { min-height: 52px; font-size: 1.05rem; }
+
+.row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.row-tight { display: flex; gap: .4rem; align-items: center; }
+.grid-2 { display: grid; gap: .7rem; grid-template-columns: 1fr 1fr; }
+/* Grid and flex children default to min-width:auto, which refuses to shrink
+   below an input's intrinsic width - on a 375px phone that pushes date fields
+   straight out of the card. */
+.grid-2 > *, .row > *, .spread > * { min-width: 0; }
+.spread { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+
+/* ── weekday chips ───────────────────────────────────────────────────── */
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: .3rem; }
+.day-chip {
+  min-height: var(--tap); padding: .35rem .1rem;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  font-size: .78rem; font-weight: 600; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.day-chip[aria-pressed="true"] {
+  background: var(--accent); color: var(--accent-in); border-color: transparent;
+}
+
+/* ── lists ───────────────────────────────────────────────────────────── */
+.list { display: flex; flex-direction: column; gap: .5rem; }
+.item {
+  display: flex; align-items: center; gap: .7rem;
+  min-height: var(--tap);
+  padding: .6rem .75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  cursor: pointer; text-align: left; width: 100%;
+  font: inherit; color: var(--ink);
+}
+.item:hover { border-color: var(--accent); }
+.item-main { flex: 1; min-width: 0; }
+.item-title { font-weight: 600; }
+.item-sub { font-size: .84rem; color: var(--ink-dim); }
+.item.inactive .item-title { color: var(--ink-faint); text-decoration: line-through; }
+
+.empty {
+  text-align: center; color: var(--ink-dim);
+  padding: 2rem 1rem; border: 1px dashed var(--line);
+  border-radius: var(--radius); background: var(--surface);
+}
+.empty strong { display: block; color: var(--ink); margin-bottom: .3rem; }
+
+/* ── roster result ───────────────────────────────────────────────────── */
+.day-card {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius-s); padding: .7rem .8rem;
+}
+.day-card + .day-card { margin-top: .5rem; }
+.day-date { font-weight: 700; font-size: .95rem; }
+.day-shift {
+  display: flex; gap: .6rem; align-items: baseline;
+  padding: .3rem 0; border-top: 1px solid var(--line); margin-top: .4rem;
+}
+.day-shift .sname {
+  flex: none; min-width: 5.5rem;
+  font-size: .8rem; color: var(--ink-faint); font-weight: 600;
+}
+.day-shift .swho { flex: 1; }
+.day-shift .swho.gap { color: var(--warn); font-style: italic; }
+
+.tally { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chip {
+  padding: .2rem .6rem; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-size: .85rem;
+}
+.chip b { font-variant-numeric: tabular-nums; }
+
+.notice {
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+  padding: .6rem .8rem; border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  font-size: .9rem;
+}
+.notice ul { margin: .35rem 0 0; padding-left: 1.1rem; }
+.notice li { margin-bottom: .2rem; }
+.notice.bad { border-left-color: var(--bad); }
+
+pre.roster-text {
+  margin: 0; padding: .8rem;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow-x: auto; font-size: .8rem; line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ── tab bar ─────────────────────────────────────────────────────────── */
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: .45rem .2rem .5rem;
+  background: none; border: none; cursor: pointer;
+  color: var(--ink-faint); font: inherit; font-size: .68rem; font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab svg {
+  width: 22px; height: 22px; fill: none;
+  stroke: currentColor; stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.tab[aria-current="page"] { color: var(--accent); }
+
+/* ── toast + modal ───────────────────────────────────────────────────── */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%) translateY(1rem);
+  bottom: calc(5rem + env(safe-area-inset-bottom));
+  z-index: 40; max-width: calc(100vw - 2rem);
+  padding: .6rem 1rem; border-radius: 999px;
+  background: var(--raised); color: var(--ink);
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+  font-size: .9rem; opacity: 0; pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.modal {
+  width: min(30rem, calc(100vw - 1.5rem));
+  padding: 0; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow);
+}
+.modal::backdrop { background: rgba(0,0,0,.55); }
+.modal-body { padding: 1rem; }
+.modal-body > * + * { margin-top: .8rem; }
+.modal h2 { font-size: 1.05rem; }
+.modal-actions { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
+.modal-actions .btn { flex: 1 1 auto; min-width: 7rem; }
+
+.err { color: var(--bad); font-size: .88rem; min-height: 1.1rem; }
+
+/* ── wider screens: tabs move to the top, content breathes ───────────── */
+@media (min-width: 46rem) {
+  .tabbar {
+    position: sticky; top: 0; bottom: auto;
+    grid-template-columns: repeat(5, max-content);
+    justify-content: center; gap: .3rem;
+    border-top: none; border-bottom: 1px solid var(--line);
+    padding: .3rem .5rem;
+    order: -1;
+  }
+  .tab { flex-direction: row; gap: .45rem; padding: .5rem .9rem; font-size: .85rem; border-radius: var(--radius-s); }
+  .tab[aria-current="page"] { background: var(--accent-lo); }
+  .appbar { position: static; }
+  body { display: flex; flex-direction: column; }
+  .view { padding-bottom: 3rem; width: 100%; }
+  .toast { bottom: 2rem; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+  .btn:active { transform: none; }
+}

@@ -1,0 +1,137 @@
+"""Publish dist/Rosterm8.exe as a GitHub release (tag = v<APP_VERSION>).
+
+The permanent download URL - also what installed builds poll for updates - is:
+
+    https://github.com/<owner>/<repo>/releases/latest/download/Rosterm8.exe
+
+Bump version.py, run release.bat, done. Requires the GitHub CLI:
+    winget install GitHub.cli  &&  gh auth login
+
+Pass --announce to also post a Discord webhook announcement (see
+core/announce.py) once the release upload has succeeded. Without the flag,
+nothing is ever posted to Discord.
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+from core.announce import announce_release
+from core.updater import GITHUB_REPO
+from version import APP_VERSION
+
+EXE = Path("dist/Rosterm8.exe")
+
+
+def gh(*args: str) -> subprocess.CompletedProcess:
+    """Run a gh subcommand, capturing output."""
+    return subprocess.run(["gh", *args], capture_output=True, text=True)
+
+
+def changelog(version: str) -> str:
+    """The CHANGELOG.md section for this version, verbatim.
+
+    CHANGELOG.md is the single source of truth (it is also bundled into the
+    exe for the in-app About window). We don't derive notes from git tags -
+    releases are tagged by `gh release create`, so the tag does not exist
+    locally when this runs.
+    """
+    try:
+        text = Path("CHANGELOG.md").read_text(encoding="utf-8")
+    except OSError:
+        return "- See the commit history."
+
+    out: list[str] = []
+    capturing = False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if capturing:
+                break
+            capturing = line[3:].strip() == version
+            continue
+        if capturing and (line.strip() or out):
+            out.append(line.rstrip())
+    body = "\n".join(out).strip()
+    return body or f"- Release {version}. See CHANGELOG.md for details."
+
+
+def run_tests() -> bool:
+    """Run the unit suite; a failing build must never be published."""
+    print("  Running tests...")
+    result = subprocess.run([sys.executable, "-m", "unittest", "discover",
+                             "-s", "tests"], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(result.stdout[-2000:] or result.stderr[-2000:])
+        return False
+    print("  Tests passed.")
+    return True
+
+
+def main() -> int:
+    """Publish the built exe as a GitHub release. Returns a shell exit code."""
+    announce = "--announce" in sys.argv[1:]
+
+    if not run_tests():
+        print("  TESTS FAILED - not releasing.")
+        return 1
+    if not EXE.exists():
+        print(f"  {EXE} not found - build first (build.bat / PyInstaller).")
+        return 1
+    if gh("--version").returncode != 0:
+        print("  GitHub CLI not found:  winget install GitHub.cli")
+        return 1
+    if gh("auth", "status").returncode != 0:
+        print("  Not logged in:  gh auth login")
+        return 1
+
+    slug = gh("repo", "view", "--json", "nameWithOwner",
+              "-q", ".nameWithOwner").stdout.strip()
+    if slug.lower() != GITHUB_REPO.lower():
+        print(f"  Remote is {slug} but core/updater.py checks {GITHUB_REPO}.\n"
+              f"  Fix GITHUB_REPO before releasing or clients go stale.")
+        return 1
+
+    tag = f"v{APP_VERSION}"
+    notes_body = changelog(APP_VERSION)
+    notes = (
+        f"## What's new\n\n{notes_body}\n\n"
+        "---\n\n"
+        "Download `Rosterm8.exe` and run it - no install, no admin. It is "
+        "unsigned, so Windows SmartScreen shows \"Windows protected your PC\": "
+        "click **More info** then **Run anyway**. Existing installs update "
+        "themselves from this release."
+    )
+
+    if gh("release", "view", tag).returncode == 0:
+        print(f"  Release {tag} exists - updating asset + notes")
+        r1 = gh("release", "upload", tag, str(EXE), "--clobber")
+        r2 = gh("release", "edit", tag, "--notes", notes)
+        ok = r1.returncode == 0 and r2.returncode == 0
+        if not ok:
+            print("  " + (r1.stderr.strip() or r2.stderr.strip()))
+    else:
+        r = gh("release", "create", tag, str(EXE),
+               "--title", f"Rosterm8 {tag}", "--notes", notes)
+        ok = r.returncode == 0
+        print("  " + (f"Created release {tag}" if ok else r.stderr.strip()))
+
+    if not ok:
+        return 1
+
+    download_url = f"https://github.com/{slug}/releases/latest/download/Rosterm8.exe"
+    print(f"\n  Permanent link:\n  {download_url}\n")
+
+    # Discord announcement is opt-in per invocation and only ever happens
+    # after the upload above has already succeeded.
+    if announce:
+        posted = announce_release(APP_VERSION, notes_body, download_url)
+        print(f"  Discord announcement: {'posted' if posted else 'FAILED (see above)'}")
+    else:
+        print("  Pass --announce to also post this release to Discord.")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

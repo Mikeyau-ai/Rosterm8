@@ -1,0 +1,29 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+title Rosterm8 - release
+
+echo.
+echo   ##### #   # #   #  ###  ##### #### ##### #   #  ###
+echo     #   ##  # #   # #   #   #   #    #    ## ## #   #
+echo     #   # # # #   # #   #   #   #    ###  # # #  ###
+echo     #   #  ## #   # #   #   #   #    #    #   # #   #
+echo   ##### #   #   #    ###  ##### #### ##### #   #  ###
+echo   release script   github.com/Mikeyau-ai/Rosterm8
+echo.
+echo  Building + publishing Rosterm8 release...
+echo.
+
+if exist build rmdir /s /q build
+if exist dist  rmdir /s /q dist
+
+python -m pip install -q --upgrade pyinstaller
+python -m PyInstaller --noconfirm --clean Rosterm8.spec
+if errorlevel 1 (
+  echo  BUILD FAILED - not releasing.
+  pause
+  exit /b 1
+)
+
+python release.py %*
+pause
