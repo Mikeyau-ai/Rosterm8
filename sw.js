@@ -24,6 +24,8 @@ const SHELL = [
   './js/scheduler.js',
   './js/ai.js',
   './js/install.js',
+  './js/sync.js',
+  './js/config.js',
   './js/views/roster.js',
   './js/views/people.js',
   './js/views/shifts.js',

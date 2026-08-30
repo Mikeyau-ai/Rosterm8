@@ -8,12 +8,14 @@
 import { store } from '../store.js';
 import { PROVIDERS } from '../ai.js';
 import {
-  el, fill, toast, promptText, confirmDialog, downloadText, weekdayPicker, TIME_STEP_SECONDS,
+  el, fill, toast, promptText, confirmDialog, downloadText, weekdayPicker, copyText,
+  TIME_STEP_SECONDS,
 } from '../ui.js';
 import { show, refreshOrgs } from '../app.js';
 import * as peopleView from './people.js';
 import * as shiftsView from './shifts.js';
 import { canInstall, isInstalled, isIOS, promptInstall } from '../install.js';
+import * as sync from '../sync.js';
 
 const THEME_KEY = 'rosterm8.theme';
 
@@ -58,6 +60,7 @@ const MENU = [
   {
     group: 'App',
     items: [
+      { id: 'sync', label: 'Sync', hint: 'Keep your rosters on every device, encrypted' },
       { id: 'backup', label: 'Backup', hint: 'Export your data, or restore it' },
       { id: 'ai', label: 'AI assist', hint: 'Read availability from typed notes' },
       { id: 'appearance', label: 'Appearance', hint: 'Light, dark or match the device' },
@@ -144,6 +147,7 @@ function renderSectionBody(name, container) {
           ])]
         : [el('div', { className: 'card muted', textContent: 'No organisation selected yet.' })];
     case 'organisation': return [renderOrgCard()];
+    case 'sync': return [renderSyncCard(container)];
     case 'backup': return [renderBackupCard(container)];
     case 'ai': return [renderAICard()];
     case 'appearance': return [renderThemeCard()];
@@ -386,6 +390,146 @@ function renderThemeCard() {
   return el('div', { className: 'card' }, [
     el('h3', { textContent: 'Theme' }),
     el('div', { className: 'row' }, buttons),
+  ]);
+}
+
+/**
+ * Section: encrypted sync across devices.
+ *
+ * Everything is encrypted on this device before it is sent, using a key
+ * derived from the sync code. The code never leaves the device, so the server
+ * - and whoever runs it - stores bytes it cannot read.
+ *
+ * The flip side is stated plainly in the UI: lose the code and nobody can get
+ * the data back, because nobody else ever had the key.
+ */
+function renderSyncCard(container) {
+  if (!sync.isConfigured()) {
+    return el('div', { className: 'card' }, [
+      el('h3', { textContent: 'Sync' }),
+      el('div', {
+        className: 'muted',
+        textContent: 'No sync server is set up for this app, so everything stays on '
+          + 'this device. Use Backup to keep a copy safe.',
+      }),
+    ]);
+  }
+
+  const code = sync.currentCode();
+  const err = el('div', { className: 'err' });
+  const redraw = () => render(container);
+
+  const blurb = el('div', {
+    className: 'muted',
+    textContent: 'Sync keeps your rosters on every device you use, and off this '
+      + 'phone alone. Everything is encrypted here before it is sent — the server '
+      + 'stores it but cannot read it.',
+  });
+
+  if (!code) {
+    const startBtn = el('button', {
+      className: 'btn btn-primary btn-block', textContent: 'Turn on sync',
+      onclick: async () => {
+        const fresh = sync.generateCode();
+        sync.setCode(fresh);
+        try {
+          await sync.push(store.data, fresh);
+          toast('Sync is on');
+        } catch (e) {
+          sync.setCode(null);
+          err.textContent = e.message;
+        }
+        redraw();
+      },
+    });
+    const joinBtn = el('button', {
+      className: 'btn btn-block', textContent: 'Use a code from another device',
+      onclick: async () => {
+        const entered = await promptText('Enter sync code', 'Code from your other device');
+        if (!entered) return;
+        try {
+          const result = await sync.pull(entered);
+          if (!result) {
+            err.textContent = 'No data found for that code — check it and try again.';
+            return;
+          }
+          const ok = await confirmDialog(
+            'Replace what is on this device?',
+            'The data from that code will replace everything currently on this device. '
+            + 'Export a backup first if you are not sure.',
+            'Replace'
+          );
+          if (!ok) return;
+          store.importJSON(JSON.stringify(result.data));
+          sync.setCode(entered);
+          refreshOrgs();
+          toast('Synced from your other device');
+          show('roster');
+        } catch (e) {
+          err.textContent = e.message;
+        }
+      },
+    });
+    return el('div', { className: 'card' }, [
+      el('h3', { textContent: 'Sync' }), blurb, err, startBtn, joinBtn,
+    ]);
+  }
+
+  // Sync is on: show the code, and be blunt about what losing it means.
+  // Grouped for the eye; the stored value stays stripped.
+  const shown = sync.formatCode(code);
+  const codeBox = el('div', { className: 'sync-code mono', textContent: shown });
+  const state = sync.status.state === 'error'
+    ? `Last sync failed: ${sync.status.message}`
+    : sync.status.state === 'synced' ? 'Up to date.'
+      : sync.status.state === 'pending' ? 'Saving changes…' : 'Ready.';
+
+  return el('div', { className: 'card' }, [
+    el('h3', { textContent: 'Sync' }),
+    blurb,
+    el('label', { className: 'label', textContent: 'Your sync code' }),
+    codeBox,
+    el('div', { className: 'notice bad' }, [
+      el('strong', { textContent: 'Write this down.' }),
+      el('div', {
+        textContent: 'It is the only key to your data. Nobody — including whoever '
+          + 'runs the server — can recover it for you if it is lost, because nobody '
+          + 'else has ever had it.',
+      }),
+    ]),
+    el('div', { className: 'row' }, [
+      el('button', {
+        className: 'btn', textContent: 'Copy code', onclick: () => copyText(shown),
+      }),
+      el('button', {
+        className: 'btn', textContent: 'Sync now',
+        onclick: async () => {
+          err.textContent = '';
+          try {
+            await sync.push(store.data);
+            toast('Synced');
+          } catch (e) { err.textContent = e.message; }
+          redraw();
+        },
+      }),
+    ]),
+    el('div', { className: 'faint', textContent: state }),
+    err,
+    el('button', {
+      className: 'btn btn-danger btn-block', textContent: 'Turn off sync on this device',
+      onclick: async () => {
+        const ok = await confirmDialog(
+          'Turn off sync?',
+          'This device will stop sending changes. Your rosters stay on this device, '
+          + 'and the copy on the server is left as it is.',
+          'Turn off'
+        );
+        if (!ok) return;
+        sync.setCode(null);
+        toast('Sync off');
+        redraw();
+      },
+    }),
   ]);
 }
 

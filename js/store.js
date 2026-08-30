@@ -92,7 +92,12 @@ export const store = {
   load() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) {
+      if (!raw) {
+        // Nothing stored: reset rather than leaving whatever happened to be in
+        // memory. Without this, loading after a wipe silently keeps the old
+        // data and the next save writes it straight back.
+        this.data = emptyData();
+      } else {
         const parsed = JSON.parse(raw);
         this.data = { ...emptyData(), ...parsed };
         this.data.settings = { ...emptyData().settings, ...(parsed.settings || {}) };
@@ -129,11 +134,23 @@ export const store = {
   save() {
     try {
       localStorage.setItem(KEY, JSON.stringify(this.data));
-      return true;
     } catch (err) {
       console.error('Could not save.', err);
       return false;
     }
+    // Tell whoever is listening (the sync layer) that the data moved on. Kept
+    // as a plain callback so the store stays ignorant of what sync even is.
+    try {
+      this._onSaved?.(this.data);
+    } catch (err) {
+      console.warn('A save listener threw; the save itself was fine.', err);
+    }
+    return true;
+  },
+
+  /** Register a single listener called after every successful save. */
+  onSaved(fn) {
+    this._onSaved = fn;
   },
 
   // ---------------------------------------------------------- organisations --

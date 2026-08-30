@@ -15,6 +15,7 @@ import * as settingsView from './views/settings.js';
 // Imported for its side effect: it has to be listening for the browser's
 // install event from the moment the app starts, not when Settings is opened.
 import './install.js';
+import * as sync from './sync.js';
 
 // Three sections. "Roster" is the rosters you have saved - the thing you open
 // the app to look at - and "New Roster" is the builder. People, shifts and
@@ -158,6 +159,9 @@ function registerWorker() {
 /** Wire everything up and show the first screen. */
 function init() {
   store.load();
+
+  // Push an encrypted copy shortly after any change, when sync is switched on.
+  store.onSaved((data) => sync.schedulePush(data));
   refreshOrgs();
 
   for (const tab of document.querySelectorAll('.tab')) {
