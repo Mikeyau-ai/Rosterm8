@@ -1,5 +1,5 @@
 /**
- * Roster screen: the app's home screen. Tap the dates to roster on the
+ * New Roster screen: the builder. Tap the dates to roster on the
  * calendar, build a roster, then save/copy/share it. This is the single most
  * used screen, so the common weekend-cafe case stays quick: the month's
  * "Weekends" button fills a month in one tap, and individual dates can then

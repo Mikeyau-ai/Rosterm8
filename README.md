@@ -20,18 +20,26 @@ Open the site, tap **Add to Home Screen** (Safari: Share → Add to Home Screen;
 Chrome: menu → Install app), and it behaves like an installed app — full screen,
 its own icon, and it works with no signal.
 
+The app has three sections:
+
+- **Roster** — the rosters you've saved. This is what you open it to look at.
+- **New Roster** — the calendar and the Build button.
+- **Settings** — everything you set up once: People, Shifts, Opening hours,
+  plus backup, AI assist, appearance and the home-screen shortcut.
+
 1. **Name your organisation** — the cafe, the shop, the team. You can have more
    than one; the dropdown at the top switches between them.
-2. **Shifts** — the blocks of work a day is made of, e.g. `Cafe 08:00–12:00,
+2. **Settings → Shifts** — the blocks of work a day is made of, e.g. `Cafe 08:00–12:00,
    2 people needed`. They're filled in the order listed.
-3. **People** — add everyone, tick the days each can work, add any away dates,
+3. **Settings → People** — add everyone, tick the days each can work, add any away dates,
    and set any "never roster these two together" pairs.
-4. **Roster** — tap the dates you want on the calendar, press **Build**. Save
-   it, copy it, or share it straight into a message.
+4. **New Roster** — tap the dates you want on the calendar, press **Build**.
+   Save it, and it appears under **Roster**. You can copy it or share it
+   straight into a message.
 
 ### Opening days and hours
 
-Set these once in **Settings → This organisation**:
+Set these once in **Settings → Opening hours**:
 
 - **Open on** — the days you normally trade. Everything else is dimmed on the
   roster calendar, and an **All open days** shortcut appears. Dimmed, not
@@ -67,7 +75,7 @@ takes the later dates back off again. Unticking returns you to the first week.
 
 Everything is stored in this browser's local storage. That's what makes the app
 private and free to run — but it also means **clearing your browsing data will
-erase it**. Use **Settings → Export backup** every so often and keep the file in
+erase it**. Use **Settings → Backup → Export** every so often and keep the file in
 Files, Drive or iCloud. **Restore from backup** puts it all back.
 
 ## The scheduler
@@ -81,9 +89,9 @@ For each vacancy it ranks everyone who is eligible by
 2. longest since they last worked — spread the days out
 3. name — a stable tiebreak, so the result never changes between runs
 
-and takes the top candidate. It takes the exact dates picked on the calendar and enforces weekly
-availability, away dates, "never together" pairs, an optional per-person cap,
-and one shift per person per day. Anything it can't satisfy becomes a note on
+and takes the top candidate. It works from the exact dates picked on the
+calendar, and enforces weekly availability, away dates, "never together"
+pairs, an optional per-person cap, and one shift per person per day. Anything it can't satisfy becomes a note on
 the roster instead of a silent gap.
 
 It was ported from the original Python version and produces byte-identical
@@ -134,6 +142,7 @@ the same reason — offline is verified against the deployed site.
 | Storage + backup | `js/store.js` |
 | AI assist | `js/ai.js` |
 | Shared widgets | `js/ui.js` |
+| Home-screen install | `js/install.js` |
 | Screens | `js/views/*.js` |
 | Offline | `sw.js`, `manifest.webmanifest` |
 | Branding | `make_icons.py` → `icons/` |
@@ -147,5 +156,7 @@ still runs, but it is no longer developed — the web app is the live version.
 Hosted on GitHub Pages straight from the default branch. Push, and the site
 updates; there is nothing to build and nothing to install.
 
-When you change any file listed in `sw.js`, bump the `CACHE` constant at the top
-of it — that's what tells already-installed copies to fetch the new version.
+The service worker serves the cached copy first and refreshes in the
+background, so an installed copy picks up a change on the **second** open,
+not the first. Add any new file to the `SHELL` list in `sw.js` so it is
+available offline.

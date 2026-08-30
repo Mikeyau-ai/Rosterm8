@@ -304,6 +304,15 @@ button:focus-visible {
 .item-sub { font-size: .84rem; color: var(--ink-dim); }
 .item.inactive .item-title { color: var(--ink-faint); text-decoration: line-through; }
 
+/* Settings menu rows: a chevron marks the ones that open a sub-screen. */
+.item-chevron {
+  flex: none; color: var(--ink-faint);
+  font-size: 1.35rem; line-height: 1;
+}
+
+.install-steps { margin: .2rem 0 0; padding-left: 1.3rem; color: var(--ink-dim); }
+.install-steps li { margin-bottom: .35rem; }
+
 .empty {
   text-align: center; color: var(--ink-dim);
   padding: 2rem 1rem; border: 1px dashed var(--line);
@@ -358,7 +367,7 @@ pre.roster-text {
 /* ── tab bar ─────────────────────────────────────────────────────────── */
 .tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(3, 1fr);
   background: var(--surface);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
@@ -406,13 +415,14 @@ pre.roster-text {
 
 /* ── wider screens: tabs move to the top, content breathes ───────────── */
 @media (min-width: 46rem) {
+  /* The wordmark stays on top and the sections sit directly beneath it -
+     no `order`, so the bars follow document order. */
   .tabbar {
-    position: sticky; top: 0; bottom: auto;
-    grid-template-columns: repeat(5, max-content);
+    position: static; bottom: auto;
+    grid-template-columns: repeat(3, max-content);
     justify-content: center; gap: .3rem;
     border-top: none; border-bottom: 1px solid var(--line);
     padding: .3rem .5rem;
-    order: -1;
   }
   .tab { flex-direction: row; gap: .45rem; padding: .5rem .9rem; font-size: .85rem; border-radius: var(--radius-s); }
   .tab[aria-current="page"] { background: var(--accent-lo); }

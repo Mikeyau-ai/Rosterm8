@@ -1,5 +1,5 @@
 /**
- * Saved screen: browse previously built rosters, and open one to review,
+ * Roster screen: browse the rosters you have saved, and open one to review,
  * copy, share, or delete it. Follows the same list-then-detail pattern as
  * the People screen - there is no side-by-side layout on a phone.
  */
@@ -17,9 +17,11 @@ export function render(container) {
   if (rosters.length === 0) {
     openId = null;
     fill(container, [emptyState(
-      'No saved rosters yet',
-      'Build one on the Roster screen.',
-      el('button', { className: 'btn btn-primary', textContent: 'Build a roster', onclick: () => show('roster') })
+      'No rosters yet',
+      'Make one on the New Roster screen and save it — it will show up here.',
+      el('button', {
+        className: 'btn btn-primary', textContent: 'New Roster', onclick: () => show('new'),
+      })
     )]);
     return;
   }

@@ -1,6 +1,9 @@
 /**
- * Settings screen: organisation management, backup/restore, AI assist config,
- * theme, and the destructive "delete everything" escape hatch.
+ * Settings: a hub for everything that isn't building a roster.
+ *
+ * Holds the People and Shifts editors (which used to be their own tabs),
+ * opening hours, the organisation's name, backup/restore, AI assist config,
+ * appearance, and the destructive "delete everything" escape hatch.
  */
 import { store } from '../store.js';
 import { PROVIDERS } from '../ai.js';
@@ -8,6 +11,9 @@ import {
   el, fill, toast, promptText, confirmDialog, downloadText, weekdayPicker, TIME_STEP_SECONDS,
 } from '../ui.js';
 import { show, refreshOrgs } from '../app.js';
+import * as peopleView from './people.js';
+import * as shiftsView from './shifts.js';
+import { canInstall, isInstalled, isIOS, promptInstall } from '../install.js';
 
 const THEME_KEY = 'rosterm8.theme';
 
@@ -24,16 +30,127 @@ function applyTheme(value) {
 // Apply whatever was saved last time, right away at module load.
 applyTheme(localStorage.getItem(THEME_KEY) || '');
 
-/** Entry point: render every settings section into `container`. */
+/**
+ * Which sub-screen is open, or null for the menu.
+ *
+ * Settings is a hub rather than one long page: it holds the two editors that
+ * used to be their own tabs, and stacking People, Shifts and everything else
+ * into a single scroll would bury them.
+ */
+let section = null;
+
+/** The menu, grouped so setting the place up is separated from app settings. */
+const MENU = [
+  {
+    group: 'Set up',
+    items: [
+      { id: 'people', label: 'People', hint: 'Who you roster, and the days each can work' },
+      { id: 'shifts', label: 'Shifts', hint: 'The blocks of work a rostered day is made of' },
+      { id: 'hours', label: 'Opening hours', hint: 'The days and times you trade' },
+    ],
+  },
+  {
+    group: 'Organisation',
+    items: [
+      { id: 'organisation', label: 'Organisation', hint: 'Rename or delete this organisation' },
+    ],
+  },
+  {
+    group: 'App',
+    items: [
+      { id: 'backup', label: 'Backup', hint: 'Export your data, or restore it' },
+      { id: 'ai', label: 'AI assist', hint: 'Read availability from typed notes' },
+      { id: 'appearance', label: 'Appearance', hint: 'Light, dark or match the device' },
+      { id: 'install', label: 'Add to Home Screen', hint: 'Keep Rosterm8 one tap away, and working offline' },
+      { id: 'about', label: 'About', hint: 'What this is, and how to erase it' },
+    ],
+  },
+];
+
+/** Open Settings at a particular sub-screen, or at the menu when given null. */
+export function openSection(name) {
+  section = name;
+}
+
+/** Entry point: the settings menu, or whichever sub-screen is open. */
 export function render(container) {
-  fill(container, [
-    el('h2', { textContent: 'Settings' }),
-    renderOrgCard(),
-    renderBackupCard(container),
-    renderAICard(),
-    renderThemeCard(),
-    renderAboutCard(),
-  ]);
+  if (!section) {
+    fill(container, [el('h2', { textContent: 'Settings' }), ...renderMenu(container)]);
+    return;
+  }
+
+  const item = MENU.flatMap((g) => g.items).find((i) => i.id === section);
+  const backBtn = el('button', {
+    className: 'btn btn-sm', textContent: '← Settings',
+    onclick: () => { section = null; render(container); },
+  });
+  const header = el('div', { className: 'row-tight' }, [backBtn]);
+
+  // Most sections describe an organisation, so there has to be one first.
+  // Without this guard the people/shifts editors would happily write records
+  // against a null organisation that nothing could ever show again.
+  if (['people', 'shifts', 'hours', 'organisation'].includes(section) && !store.currentOrg()) {
+    fill(container, [
+      header,
+      el('h2', { textContent: item?.label || 'Settings' }),
+      el('div', {
+        className: 'card muted',
+        textContent: 'Create an organisation first — use the dropdown at the top of the screen.',
+      }),
+    ]);
+    return;
+  }
+
+  // People and Shifts are full editors with their own internal navigation, so
+  // they render into a nested element and keep the back bar above them.
+  if (section === 'people' || section === 'shifts') {
+    const sub = el('div');
+    fill(container, [header, sub]);
+    (section === 'people' ? peopleView : shiftsView).render(sub);
+    return;
+  }
+
+  // No section heading here: every card below already carries its own, and
+  // two identical headings stacked ("Backup / Backup") just reads as a bug.
+  fill(container, [header, ...renderSectionBody(section, container)]);
+}
+
+/** The tappable menu rows. */
+function renderMenu(container) {
+  return MENU.map((group) => el('div', {}, [
+    el('label', { className: 'label', textContent: group.group }),
+    el('div', { className: 'list' }, group.items.map((item) => el('button', {
+      className: 'item',
+      onclick: () => { section = item.id; render(container); },
+    }, [
+      el('div', { className: 'item-main' }, [
+        el('div', { className: 'item-title', textContent: item.label }),
+        el('div', { className: 'item-sub', textContent: item.hint }),
+      ]),
+      el('span', { className: 'item-chevron', textContent: '›', 'aria-hidden': 'true' }),
+    ]))),
+  ]));
+}
+
+/** The cards belonging to one sub-screen. */
+function renderSectionBody(name, container) {
+  const org = store.currentOrg();
+  switch (name) {
+    case 'hours':
+      return org
+        ? [el('div', { className: 'card' }, [
+            el('h3', { textContent: 'Opening hours' }),
+            renderOpeningHours(org),
+          ])]
+        : [el('div', { className: 'card muted', textContent: 'No organisation selected yet.' })];
+    case 'organisation': return [renderOrgCard()];
+    case 'backup': return [renderBackupCard(container)];
+    case 'ai': return [renderAICard()];
+    case 'appearance': return [renderThemeCard()];
+    case 'install': return [renderInstallCard(container)];
+    case 'about': return [renderAboutCard()];
+    default: return [];
+  }
 }
 
 /** Section: rename or delete the current organisation. */
@@ -75,7 +192,6 @@ function renderOrgCard() {
   return el('div', { className: 'card' }, [
     el('h3', { textContent: 'This organisation' }),
     el('div', { className: 'row-tight' }, [nameInput, saveBtn]),
-    renderOpeningHours(org),
     deleteBtn,
   ]);
 }
@@ -83,7 +199,7 @@ function renderOrgCard() {
 /**
  * Opening days and hours for the current organisation.
  *
- * The days drive the calendar on the Roster screen - anything outside them is
+ * The days drive the calendar on the New Roster screen - anything outside is
  * dimmed, and an "All open days" shortcut appears. The hours are used to
  * pre-fill the times when a new shift is added, so the common case needs no
  * typing.
@@ -270,6 +386,64 @@ function renderThemeCard() {
   return el('div', { className: 'card' }, [
     el('h3', { textContent: 'Theme' }),
     el('div', { className: 'row' }, buttons),
+  ]);
+}
+
+/**
+ * Section: put Rosterm8 on the home screen.
+ *
+ * Three states, because the platforms genuinely differ: already installed,
+ * installable via the browser's own prompt, or iOS - where no such API exists
+ * and the only truthful option is to show the steps.
+ */
+function renderInstallCard(container) {
+  const blurb = el('div', {
+    className: 'muted',
+    textContent: 'Installed, Rosterm8 opens full screen with its own icon and works '
+      + 'with no signal at all. This is not an app-store download - nothing lands on '
+      + 'the phone but a shortcut and the page itself.',
+  });
+
+  if (isInstalled()) {
+    return el('div', { className: 'card' }, [
+      el('h3', { textContent: 'Add to Home Screen' }),
+      el('div', { className: 'notice', textContent: 'Already installed — you are using it right now.' }),
+      blurb,
+    ]);
+  }
+
+  if (canInstall()) {
+    const btn = el('button', {
+      className: 'btn btn-primary btn-block btn-lg', textContent: 'Add to Home Screen',
+      onclick: async () => {
+        const accepted = await promptInstall();
+        toast(accepted ? 'Added to your home screen' : 'Not added');
+        render(container);            // the prompt is spent either way
+      },
+    });
+    return el('div', { className: 'card' }, [
+      el('h3', { textContent: 'Add to Home Screen' }), blurb, btn,
+    ]);
+  }
+
+  // iOS offers no programmatic route, so spell out the Share-sheet steps.
+  const steps = isIOS()
+    ? ['Tap the Share button at the bottom of Safari.',
+       'Scroll down and choose "Add to Home Screen".',
+       'Tap Add.']
+    : ['Open your browser’s menu.',
+       'Choose "Install app" or "Add to Home screen".',
+       'Confirm.'];
+
+  return el('div', { className: 'card' }, [
+    el('h3', { textContent: 'Add to Home Screen' }),
+    blurb,
+    el('ol', { className: 'install-steps' }, steps.map((s) => el('li', { textContent: s }))),
+    el('div', {
+      className: 'faint',
+      textContent: 'If you cannot see the option, it may already be installed, or the '
+        + 'browser may not support it — Safari on iPhone and Chrome on Android both do.',
+    }),
   ]);
 }
 

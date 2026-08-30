@@ -4,23 +4,34 @@
  *
  * Views are plain modules exporting `render(container)`. Switching view simply
  * re-renders; there is no virtual DOM and no client-side router beyond the hash,
- * which is enough for five screens and keeps the back button working.
+ * which is enough for three sections and keeps the back button working.
  */
 import { store } from './store.js';
 import { el, fill, promptText, toast } from './ui.js';
 
-import * as rosterView from './views/roster.js';
-import * as peopleView from './views/people.js';
-import * as shiftsView from './views/shifts.js';
+import * as builderView from './views/roster.js';
 import * as savedView from './views/saved.js';
 import * as settingsView from './views/settings.js';
+// Imported for its side effect: it has to be listening for the browser's
+// install event from the moment the app starts, not when Settings is opened.
+import './install.js';
 
+// Three sections. "Roster" is the rosters you have saved - the thing you open
+// the app to look at - and "New Roster" is the builder. People, shifts and
+// opening hours are set-up, so they live inside Settings.
 const VIEWS = {
-  roster: rosterView,
-  people: peopleView,
-  shifts: shiftsView,
-  saved: savedView,
+  roster: savedView,
+  new: builderView,
   settings: settingsView,
+};
+
+// Older hash links (and this app's own earlier tab names) still resolve, so a
+// bookmark or a pinned home-screen link doesn't land on a blank screen.
+const LEGACY_VIEWS = {
+  saved: 'roster',
+  build: 'new',
+  people: 'settings',
+  shifts: 'settings',
 };
 
 const NEW_ORG = '__new__';
@@ -48,7 +59,7 @@ function welcome() {
     store.addOrg(name);
     seedDefaults();
     refreshOrgs();
-    show('shifts');
+    show('settings', { section: 'shifts' });
     toast(`${name} created — set up its shifts`);
   };
 
@@ -76,8 +87,15 @@ function seedDefaults() {
 }
 
 /** Switch the visible view and update the tab bar. */
-export function show(name) {
+export function show(name, options = {}) {
+  if (LEGACY_VIEWS[name]) {
+    // A legacy name that now lives inside Settings opens straight at its
+    // section, so "shifts" still takes you to the shifts editor.
+    if (LEGACY_VIEWS[name] === 'settings') options = { section: name, ...options };
+    name = LEGACY_VIEWS[name];
+  }
   if (!VIEWS[name]) name = 'roster';
+  if (name === 'settings') settingsView.openSection(options.section ?? null);
   current = name;
   for (const tab of document.querySelectorAll('.tab')) {
     const active = tab.dataset.view === name;
@@ -114,7 +132,7 @@ async function onOrgChange(event) {
     store.addOrg(name);
     seedDefaults();
     refreshOrgs();
-    show('shifts');
+    show('settings', { section: 'shifts' });
     toast(`${name} created — set up its shifts`);
     return;
   }

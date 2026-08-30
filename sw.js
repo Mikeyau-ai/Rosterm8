@@ -23,6 +23,7 @@ const SHELL = [
   './js/store.js',
   './js/scheduler.js',
   './js/ai.js',
+  './js/install.js',
   './js/views/roster.js',
   './js/views/people.js',
   './js/views/shifts.js',
