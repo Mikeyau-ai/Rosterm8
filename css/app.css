@@ -465,3 +465,15 @@ pre.roster-text {
   * { transition: none !important; animation: none !important; }
   .btn:active { transform: none; }
 }
+
+/* The sync code: shown to be copied by hand, so it needs to be unambiguous
+   and easy to read a group at a time. */
+.sync-code {
+  padding: .7rem .8rem;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-s);
+  font-size: 1.05rem; letter-spacing: .06em;
+  word-break: break-all; text-align: center;
+  user-select: all;
+}

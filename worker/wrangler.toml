@@ -1,0 +1,14 @@
+# Cloudflare Worker that stores each device's encrypted Rosterm8 database.
+#
+# Deploy:  npx wrangler deploy      (see README.md for first-time setup)
+
+name = "rosterm8-sync"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# Created by:  npx wrangler d1 create rosterm8
+# Paste the database_id that command prints into the line below.
+[[d1_databases]]
+binding = "DB"
+database_name = "rosterm8"
+database_id = "PASTE_YOUR_DATABASE_ID_HERE"
