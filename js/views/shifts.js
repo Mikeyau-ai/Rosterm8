@@ -6,7 +6,7 @@
  * shift that matters most (e.g. the one hardest to cover) first.
  */
 import { store } from '../store.js';
-import { el, fill, confirmDialog } from '../ui.js';
+import { el, fill, confirmDialog, TIME_STEP_SECONDS } from '../ui.js';
 
 /** Entry point: render the shift list into `container`. */
 /** Times a new shift should start with: the organisation's opening hours if set. */
@@ -71,12 +71,14 @@ function renderShiftCard(shift, index, total, container) {
     },
   });
 
+  // step in seconds: 300 = 5 minutes. Nobody rosters a cafe shift to the
+  // minute, and a 5-minute picker is far quicker to thumb through on a phone.
   const startInput = el('input', {
-    type: 'time', value: shift.start,
+    type: 'time', step: String(TIME_STEP_SECONDS), value: shift.start,
     onchange: () => store.updateShift(shift.id, { start: startInput.value }),
   });
   const endInput = el('input', {
-    type: 'time', value: shift.end,
+    type: 'time', step: String(TIME_STEP_SECONDS), value: shift.end,
     onchange: () => store.updateShift(shift.id, { end: endInput.value }),
   });
 

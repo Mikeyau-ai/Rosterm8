@@ -11,6 +11,14 @@ import { weekdayOf, toDays, fromDays, formatDate } from './scheduler.js';
 export const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /**
+ * Granularity of every time field, in seconds (300 = 5 minutes).
+ *
+ * `<input type="time">` defaults to one-minute steps, which makes the picker
+ * needlessly long to scroll on a phone for times nobody sets that precisely.
+ */
+export const TIME_STEP_SECONDS = 300;
+
+/**
  * Create an element.
  * `attrs` sets properties (className, textContent, onclick, ...); anything
  * containing a dash or starting "aria"/"data" is set as an attribute instead.

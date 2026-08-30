@@ -4,7 +4,9 @@
  */
 import { store } from '../store.js';
 import { PROVIDERS } from '../ai.js';
-import { el, fill, toast, promptText, confirmDialog, downloadText, weekdayPicker } from '../ui.js';
+import {
+  el, fill, toast, promptText, confirmDialog, downloadText, weekdayPicker, TIME_STEP_SECONDS,
+} from '../ui.js';
 import { show, refreshOrgs } from '../app.js';
 
 const THEME_KEY = 'rosterm8.theme';
@@ -87,8 +89,11 @@ function renderOrgCard() {
  * typing.
  */
 function renderOpeningHours(org) {
-  const openTime = el('input', { type: 'time', value: org.openTime || '' });
-  const closeTime = el('input', { type: 'time', value: org.closeTime || '' });
+  // Same 5-minute granularity as shift times - these pre-fill them, so a
+  // finer opening hour would produce a shift time the shift editor can't hold.
+  const step = String(TIME_STEP_SECONDS);
+  const openTime = el('input', { type: 'time', step, value: org.openTime || '' });
+  const closeTime = el('input', { type: 'time', step, value: org.closeTime || '' });
 
   /** Persist whichever hour field changed. */
   const saveHours = () => {

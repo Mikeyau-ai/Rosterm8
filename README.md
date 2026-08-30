@@ -40,6 +40,9 @@ Set these once in **Settings → This organisation**:
 - **Opening hours** — used to fill in the times when you add a new shift, so
   the usual case needs no typing.
 
+Every time field steps in 5-minute blocks rather than single minutes, which
+makes the picker far quicker to thumb through on a phone.
+
 ### Picking dates
 
 The calendar takes exact dates rather than a repeating rule, because real
