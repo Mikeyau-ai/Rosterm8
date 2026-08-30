@@ -16,7 +16,9 @@ export function render(container) {
   const rosters = store.rosters();
   if (rosters.length === 0) {
     openId = null;
-    fill(container, [emptyState(
+    // The nudge belongs here too: people and shifts are worth losing even
+    // before a single roster has been saved.
+    fill(container, [...backupNudge(), emptyState(
       'No rosters yet',
       'Make one on the New Roster screen and save it — it will show up here.',
       el('button', {
@@ -31,8 +33,35 @@ export function render(container) {
     fill(container, renderOpen(opened, container));
   } else {
     openId = null;
-    fill(container, renderList(rosters, container));
+    fill(container, [...backupNudge(), ...renderList(rosters, container)]);
   }
+}
+
+/**
+ * A reminder to export, shown on the list once a backup is overdue.
+ *
+ * Nothing syncs anywhere, so an export is the only thing between a cleared
+ * browser and losing everything. Saying so once a month on the screen people
+ * actually open beats a line in a README nobody reads.
+ */
+function backupNudge() {
+  if (!store.backupOverdue()) return [];
+  const days = store.daysSinceBackup();
+
+  return [el('div', { className: 'notice' }, [
+    el('strong', {
+      textContent: days === null ? 'No backup yet' : `Last backup was ${days} days ago`,
+    }),
+    el('div', {
+      textContent: 'Your rosters live only on this device. If the browser data is '
+        + 'cleared, they are gone. Exporting takes a second.',
+    }),
+    el('button', {
+      className: 'btn btn-sm', textContent: 'Export backup now',
+      style: 'margin-top:.5rem',
+      onclick: () => show('settings', { section: 'backup' }),
+    }),
+  ])];
 }
 
 /** Build the list of saved rosters, newest first. */

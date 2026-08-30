@@ -26,6 +26,9 @@ let builtOrgId = null;
 let picked = new Set();
 let pickedOrgId = null;
 
+// Whether the requests/days-off section is expanded, kept across its rebuilds.
+let requestsOpen = false;
+
 /** Today's date as "YYYY-MM-DD". */
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -57,8 +60,14 @@ export function render(container) {
     onclick: () => { picked.clear(); refreshCalendar(); },
   });
 
+  // The requests section lists the picked dates, so it has to be rebuilt
+  // whenever the calendar selection changes - not just once on first render.
+  const requestsWrap = el('div');
+  const refreshRequests = () => { fill(requestsWrap, requestsSection(container)); };
+
   /** Update the "N dates picked" line and the suggested roster name. */
   const refreshSummary = () => {
+    refreshRequests();
     const n = picked.size;
     const sorted = [...picked].sort();
     summary.textContent = n === 0
@@ -164,7 +173,87 @@ export function render(container) {
   ]);
 
   renderResults();
-  fill(container, [formCard, availabilityDetails(container), resultsBox]);
+  fill(container, [formCard, requestsWrap, availabilityDetails(container), resultsBox]);
+}
+
+/**
+ * Per-person requests and days off, for the dates currently picked.
+ *
+ * Entered here rather than only under People because this is where you have
+ * the messages in front of you - "Sarah asked for the 12th, Tom can't do the
+ * 19th" - and going into each profile to record that is the slow way round.
+ *
+ * A request is a preference: it puts that person first in the queue for the
+ * day, but a full shift or a hard constraint still wins. A day off is the same
+ * thing People calls an away date, so the two stay in step.
+ */
+function requestsSection(container) {
+  const people = store.people().filter((p) => p.active);
+  const dates = [...picked].sort();
+
+  // Remember whether it was open: this is rebuilt on every calendar tap, and
+  // having it snap shut mid-edit would be maddening.
+  const details = el('details', { className: 'card', open: requestsOpen });
+  details.addEventListener('toggle', () => { requestsOpen = details.open; });
+  details.append(el('summary', { textContent: 'Requests and days off' }));
+
+  if (dates.length === 0 || people.length === 0) {
+    details.append(el('div', {
+      className: 'muted',
+      textContent: dates.length === 0
+        ? 'Pick the dates above first, then set who asked for what.'
+        : 'Add some people first.',
+    }));
+    return details;
+  }
+
+  details.append(el('div', {
+    className: 'faint',
+    textContent: 'Tap a date to cycle: nothing → asked to work → can’t work.',
+  }));
+
+  for (const person of people) {
+    const chips = el('div', { className: 'req-dates' });
+
+    /** Draw this person's chips from what is currently stored. */
+    const drawChips = () => {
+      fill(chips, dates.map((date) => {
+        const state = store.dateState(person.id, date);
+        const chip = el('button', {
+          type: 'button',
+          className: `req-chip is-${state}`,
+          textContent: formatDate(date, { withWeekday: false }).replace(/ \d{4}$/, ''),
+          'aria-label': `${person.name} ${date} ${state}`,
+        });
+        chip.addEventListener('click', () => {
+          // Cycle neutral → wants → can't → neutral. A date inside a multi-day
+          // away period is left alone; splitting that range here would be a
+          // surprising side effect of a single tap.
+          if (state === 'cant-range') {
+            toast(`${person.name} has a longer away period covering this — edit it under People.`);
+            return;
+          }
+          if (state === 'neutral') store.toggleRequest(person.id, date);
+          else if (state === 'wants') {
+            store.toggleRequest(person.id, date);
+            store.addBlackout(person.id, date, date, 'asked off');
+          } else {
+            store.removeBlackoutOnDate(person.id, date);
+          }
+          drawChips();
+        });
+        return chip;
+      }));
+    };
+    drawChips();
+
+    details.append(el('div', { className: 'req-person' }, [
+      el('div', { className: 'req-name', textContent: person.name }),
+      chips,
+    ]));
+  }
+
+  return details;
 }
 
 /** Build the collapsible "read availability from free text" section. */

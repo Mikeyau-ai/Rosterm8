@@ -226,9 +226,20 @@ function renderMaxShiftsCard(person) {
   return { node, commit };
 }
 
-/** Card: away-date (blackout) ranges, with add/remove. */
+/**
+ * Card: away-date ranges, with add/remove.
+ *
+ * Past dates are never deleted on their own - throwing away someone's records
+ * without being asked is the kind of thing you only notice once it has already
+ * happened. They are folded away instead, with a button to clear them.
+ */
 function renderAwayCard(person, container) {
-  const rows = (person.blackouts || []).map((b, i) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const all = person.blackouts || [];
+  const past = all.filter((b) => b.end < today);
+  const current = all.filter((b) => b.end >= today);
+
+  const rows = current.map((b) => {
     const span = b.start === b.end
       ? formatDate(b.start, { withWeekday: false })
       : `${formatDate(b.start, { withWeekday: false })} – ${formatDate(b.end, { withWeekday: false })}`;
@@ -239,8 +250,11 @@ function renderAwayCard(person, container) {
       ]),
       el('button', {
         className: 'btn btn-sm', textContent: 'Remove',
+        // Index against the real list, not the filtered one, or removing a
+        // current entry would delete whichever record happened to sit at that
+        // position in the full array.
         onclick: () => {
-          store.deleteBlackout(person.id, i);
+          store.deleteBlackout(person.id, all.indexOf(b));
           render(container);
         },
       }),
@@ -257,10 +271,45 @@ function renderAwayCard(person, container) {
     },
   });
 
+  // Past entries: collapsed, with a way to clear them once they are just clutter.
+  let pastBlock = null;
+  if (past.length) {
+    const clearBtn = el('button', {
+      className: 'btn btn-sm', textContent: `Remove ${past.length} past`,
+      onclick: async () => {
+        const ok = await confirmDialog(
+          'Remove past away dates',
+          past.length === 1
+            ? 'Delete 1 away date that has already been and gone? This cannot be undone.'
+            : `Delete ${past.length} away dates that have already been and gone? This cannot be undone.`,
+          'Remove'
+        );
+        if (!ok) return;
+        // Remove back-to-front so earlier indices stay valid as we splice.
+        for (const b of [...past].reverse()) store.deleteBlackout(person.id, all.indexOf(b));
+        toast('Past dates removed');
+        render(container);
+      },
+    });
+    pastBlock = el('details', {}, [
+      el('summary', { className: 'muted', textContent: `${past.length} past away date${past.length === 1 ? '' : 's'}` }),
+      el('div', { className: 'list', style: 'margin-top:.5rem' }, past.map((b) => el('div', {
+        className: 'muted',
+        textContent: b.start === b.end
+          ? formatDate(b.start, { withWeekday: false })
+          : `${formatDate(b.start, { withWeekday: false })} – ${formatDate(b.end, { withWeekday: false })}`,
+      }))),
+      el('div', { style: 'margin-top:.5rem' }, clearBtn),
+    ]);
+  }
+
   return el('div', { className: 'card' }, [
     el('label', { className: 'label', textContent: 'Away dates' }),
-    rows.length ? el('div', { className: 'list' }, rows) : el('div', { className: 'muted', textContent: 'None recorded.' }),
+    rows.length
+      ? el('div', { className: 'list' }, rows)
+      : el('div', { className: 'muted', textContent: 'None coming up.' }),
     addBtn,
+    pastBlock,
   ]);
 }
 

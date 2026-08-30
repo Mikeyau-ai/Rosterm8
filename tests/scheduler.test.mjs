@@ -187,6 +187,57 @@ test('constraints still apply when dates come from the calendar', () => {
   assert.ok(!aliceDates.includes('2026-06-10'), 'Alice cannot work the Wednesday');
 });
 
+test('a requested date puts that person ahead of the queue', () => {
+  // Bob would normally get the first shift on name order; Alice asked for it.
+  const alice = person(1, 'Alice');
+  const bob = person(2, 'Bob');
+  alice.requests = ['2026-06-02'];
+  const r = buildRoster({
+    orgId: 1, name: 't', people: [alice, bob], shifts: [shift(1, 'Day', 1)],
+    clashes: [], dates: ['2026-06-01', '2026-06-02'],
+  });
+  const on2nd = r.assignments.find((a) => a.date === '2026-06-02');
+  assert.equal(on2nd.personId, 1, 'Alice asked for the 2nd and should have it');
+});
+
+test('a request never overrides a hard constraint', () => {
+  // Asking for a day you are away on must not put you on it.
+  const alice = person(1, 'Alice');
+  alice.requests = ['2026-06-03'];
+  alice.blackouts = [{ start: '2026-06-03', end: '2026-06-03' }];
+  const r = buildRoster({
+    orgId: 1, name: 't', people: [alice, person(2, 'Bob')],
+    shifts: [shift(1, 'Day', 1)], clashes: [], dates: ['2026-06-03'],
+  });
+  assert.equal(r.assignments[0].personId, 2, 'Bob should cover it, not Alice');
+  assert.ok(r.notes.some((n) => n.includes('Alice asked for')));
+});
+
+test('an unmet request is reported', () => {
+  // One slot, two people both asking for it: one of them must miss out, and
+  // the roster has to say so rather than let it pass unnoticed.
+  const alice = person(1, 'Alice');
+  const bob = person(2, 'Bob');
+  alice.requests = ['2026-06-06'];
+  bob.requests = ['2026-06-06'];
+  const r = buildRoster({
+    orgId: 1, name: 't', people: [alice, bob], shifts: [shift(1, 'Day', 1)],
+    clashes: [], dates: ['2026-06-06'],
+  });
+  const misses = r.notes.filter((n) => n.includes('asked for'));
+  assert.equal(misses.length, 1, 'exactly one of them missed out');
+});
+
+test('a request outside the rostered dates is not reported as missed', () => {
+  const alice = person(1, 'Alice');
+  alice.requests = ['2026-07-04'];          // not in the roster at all
+  const r = buildRoster({
+    orgId: 1, name: 't', people: [alice], shifts: [shift(1, 'Day', 1)],
+    clashes: [], dates: ['2026-06-06'],
+  });
+  assert.ok(!r.notes.some((n) => n.includes('asked for')));
+});
+
 test('the text table carries headers, names and the summary', () => {
   const people = [person(1, 'Alice'), person(2, 'Bob')];
   const shifts = [

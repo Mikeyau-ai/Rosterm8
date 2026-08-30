@@ -14,10 +14,56 @@
 
 const KEY = 'rosterm8.v1';
 
+/**
+ * Current shape of the saved data.
+ *
+ * Bump this and add a step to `MIGRATIONS` whenever the stored shape changes.
+ * Data already on someone's phone is upgraded in place on load - there is no
+ * server to run a migration on, so it has to happen the moment the app opens,
+ * and it has to be safe to run on data written by any older version.
+ */
+const SCHEMA_VERSION = 2;
+
+/**
+ * Upgrade steps, keyed by the version they upgrade *to*.
+ * Each takes the whole data object and mutates it in place.
+ */
+const MIGRATIONS = {
+  // v2: people gained a `requests` list (dates they asked to work), and
+  // organisations gained opening days/hours.
+  2(data) {
+    for (const person of data.people || []) {
+      if (!Array.isArray(person.requests)) person.requests = [];
+    }
+    for (const org of data.orgs || []) {
+      if (!Array.isArray(org.openDays)) org.openDays = [0, 1, 2, 3, 4, 5, 6];
+      if (typeof org.openTime !== 'string') org.openTime = '';
+      if (typeof org.closeTime !== 'string') org.closeTime = '';
+    }
+  },
+};
+
+/**
+ * Bring `data` up to the current schema, running each step it has not had yet.
+ *
+ * Returns true if anything changed, so the caller can write the upgraded data
+ * straight back - otherwise the same migration would run on every single load.
+ */
+function migrate(data) {
+  const from = Number(data.version) || 1;
+  if (from >= SCHEMA_VERSION) return false;
+
+  for (let v = from + 1; v <= SCHEMA_VERSION; v++) {
+    MIGRATIONS[v]?.(data);
+  }
+  data.version = SCHEMA_VERSION;
+  return true;
+}
+
 /** Shape of a brand-new, empty database. */
 function emptyData() {
   return {
-    version: 1,
+    version: SCHEMA_VERSION,
     orgs: [],
     currentOrgId: null,
     shifts: [],
@@ -50,6 +96,19 @@ export const store = {
         const parsed = JSON.parse(raw);
         this.data = { ...emptyData(), ...parsed };
         this.data.settings = { ...emptyData().settings, ...(parsed.settings || {}) };
+
+        // Take the version from the file, never from the defaults merged in
+        // above. The earliest databases have no `version` at all, and spreading
+        // them over a default of "current" would make them look already
+        // migrated - so the upgrade would silently never run.
+        this.data.version = Number(parsed.version) || 1;
+
+        // Upgrade anything written by an older version, then write it straight
+        // back so the work is done once rather than on every load.
+        if (migrate(this.data)) {
+          this.save();
+          console.info('[store] upgraded saved data to v%d', SCHEMA_VERSION);
+        }
       }
     } catch (err) {
       console.warn('Could not read saved data; starting fresh.', err);
@@ -209,7 +268,7 @@ export const store = {
       id: newId(), orgId: this.data.currentOrgId,
       name: name.trim(), active: true,
       availableWeekdays: [0, 1, 2, 3, 4, 5, 6],
-      blackouts: [], maxShifts: null, notes: '',
+      blackouts: [], requests: [], maxShifts: null, notes: '',
     };
     this.data.people.push(person);
     this.save();
@@ -228,6 +287,66 @@ export const store = {
     this.data.people = this.data.people.filter((p) => p.id !== id);
     this.data.clashes = this.data.clashes.filter((c) => c.a !== id && c.b !== id);
     this.save();
+  },
+
+  /**
+   * Toggle a date a person has asked to work.
+   *
+   * A request is a preference, not a guarantee: the scheduler puts them on
+   * ahead of others that day, but hard constraints and a full shift still win.
+   */
+  toggleRequest(personId, date) {
+    const person = this.data.people.find((p) => p.id === personId);
+    if (!person) return;
+    if (!Array.isArray(person.requests)) person.requests = [];
+    const at = person.requests.indexOf(date);
+    if (at >= 0) person.requests.splice(at, 1);
+    else person.requests.push(date);
+    person.requests.sort();
+    this.save();
+  },
+
+  /**
+   * How a single date stands for one person: 'wants', 'cant', 'cant-range'
+   * or 'neutral'.
+   *
+   * 'cant-range' means the date falls inside a multi-day away period. That is
+   * reported separately because a single tap must not silently carve a hole in
+   * a range the user entered as one block - those are edited under People.
+   */
+  dateState(personId, date) {
+    const person = this.data.people.find((p) => p.id === personId);
+    if (!person) return 'neutral';
+    const covering = (person.blackouts || []).find((b) => b.start <= date && date <= b.end);
+    if (covering) return covering.start === covering.end ? 'cant' : 'cant-range';
+    return (person.requests || []).includes(date) ? 'wants' : 'neutral';
+  },
+
+  /** Remove a single-day away date. Returns false if none matched exactly. */
+  removeBlackoutOnDate(personId, date) {
+    const person = this.data.people.find((p) => p.id === personId);
+    if (!person) return false;
+    const at = (person.blackouts || []).findIndex((b) => b.start === date && b.end === date);
+    if (at < 0) return false;
+    person.blackouts.splice(at, 1);
+    this.save();
+    return true;
+  },
+
+  /** Remove every request and away date that fell before `before` (ISO date). */
+  clearPastDates(before) {
+    let removed = 0;
+    for (const person of this.data.people) {
+      const requests = (person.requests || []).filter((d) => d >= before);
+      removed += (person.requests || []).length - requests.length;
+      person.requests = requests;
+
+      const blackouts = (person.blackouts || []).filter((b) => b.end >= before);
+      removed += (person.blackouts || []).length - blackouts.length;
+      person.blackouts = blackouts;
+    }
+    if (removed) this.save();
+    return removed;
   },
 
   /** Mark a person unavailable across an inclusive date range. */
@@ -316,7 +435,30 @@ export const store = {
    * so an occasional export to Files/Drive is the only real safety net.
    */
   exportJSON() {
+    this.data.lastBackup = new Date().toISOString();
+    this.save();
     return JSON.stringify(this.data, null, 2);
+  },
+
+  /**
+   * Whole days since the last backup, or null if one has never been taken.
+   *
+   * Nothing here syncs anywhere, so an occasional export is the only thing
+   * standing between a cleared browser and losing the lot. The app uses this
+   * to say so at the point it matters, rather than only in the README.
+   */
+  daysSinceBackup() {
+    if (!this.data.lastBackup) return null;
+    const then = Date.parse(this.data.lastBackup);
+    if (Number.isNaN(then)) return null;
+    return Math.floor((Date.now() - then) / 86400000);
+  },
+
+  /** True when there is real data at risk and no recent backup of it. */
+  backupOverdue(afterDays = 30) {
+    if (this.data.people.length === 0 && this.data.rosters.length === 0) return false;
+    const days = this.daysSinceBackup();
+    return days === null || days >= afterDays;
   },
 
   /**

@@ -123,9 +123,14 @@ function pick(day, people, usedToday, placedIds, incompatible, worked, lastWorke
   );
   if (eligible.length === 0) return null;
 
-  // Fairness ranking - see the module comment. Comparing `name` last makes the
-  // ordering total, so the result is reproducible run to run.
+  // Ranking. Someone who asked for this date goes first - a request is a
+  // preference, not a guarantee, so it orders the queue but never overrides a
+  // hard constraint. Fairness then applies as usual, and comparing `name` last
+  // makes the ordering total, so the result is reproducible run to run.
   eligible.sort((x, y) => {
+    const rx = (x.requests || []).includes(day) ? 0 : 1;
+    const ry = (y.requests || []).includes(day) ? 0 : 1;
+    if (rx !== ry) return rx - ry;
     const wx = worked.get(x.id), wy = worked.get(y.id);
     if (wx !== wy) return wx - wy;
     const lx = lastWorked.get(x.id), ly = lastWorked.get(y.id);
@@ -215,6 +220,25 @@ export function buildRoster({ orgId, name, people, shifts, clashes, start, end, 
           `(nobody else was available).`
         );
       }
+    }
+  }
+
+  // Say so when someone asked for a date and did not get it. Without this the
+  // request would fail silently, and the person who asked would be the one to
+  // discover it.
+  const assignedByPerson = new Map();
+  for (const a of roster.assignments) {
+    if (!assignedByPerson.has(a.personId)) assignedByPerson.set(a.personId, new Set());
+    assignedByPerson.get(a.personId).add(a.date);
+  }
+  const rostered = new Set(days);
+  for (const p of roll) {
+    const got = assignedByPerson.get(p.id) || new Set();
+    const missed = (p.requests || []).filter((d) => rostered.has(d) && !got.has(d));
+    for (const date of missed) {
+      roster.notes.push(
+        `${p.name} asked for ${formatDate(date)} but could not be fitted in.`
+      );
     }
   }
 

@@ -304,6 +304,34 @@ button:focus-visible {
 .item-sub { font-size: .84rem; color: var(--ink-dim); }
 .item.inactive .item-title { color: var(--ink-faint); text-decoration: line-through; }
 
+/* ── requests / days off ─────────────────────────────────────────────── */
+.req-person { padding-top: .7rem; border-top: 1px solid var(--line); }
+.req-person + .req-person { margin-top: .1rem; }
+.req-name { font-weight: 650; font-size: .95rem; margin-bottom: .35rem; }
+.req-dates { display: flex; flex-wrap: wrap; gap: .3rem; }
+.req-chip {
+  min-height: 34px; padding: .2rem .55rem;
+  background: var(--surface-2); color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  font: inherit; font-size: .82rem; font-variant-numeric: tabular-nums;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+/* Wants and can't-work must be tellable apart without relying on colour
+   alone, so each carries a mark as well as a fill. */
+.req-chip.is-wants {
+  background: var(--ok); color: var(--accent-in);
+  border-color: transparent; font-weight: 650;
+}
+.req-chip.is-wants::before { content: '✓ '; }
+.req-chip.is-cant,
+.req-chip.is-cant-range {
+  background: transparent; color: var(--bad);
+  border-color: var(--bad); text-decoration: line-through;
+}
+.req-chip.is-cant::before,
+.req-chip.is-cant-range::before { content: '✕ '; text-decoration: none; }
+.req-chip.is-cant-range { opacity: .65; border-style: dashed; }
+
 /* Settings menu rows: a chevron marks the ones that open a sub-screen. */
 .item-chevron {
   flex: none; color: var(--ink-faint);
