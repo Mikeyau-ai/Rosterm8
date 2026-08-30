@@ -26,8 +26,19 @@ its own icon, and it works with no signal.
    2 people needed`. They're filled in the order listed.
 3. **People** — add everyone, tick the days each can work, add any away dates,
    and set any "never roster these two together" pairs.
-4. **Roster** — pick the dates and which weekdays to roster, press **Build**.
-   Save it, copy it, or share it straight into a message.
+4. **Roster** — tap the dates you want on the calendar, press **Build**. Save
+   it, copy it, or share it straight into a message.
+
+### Picking dates
+
+The calendar takes exact dates rather than a repeating rule, because real
+rosters aren't a clean pattern — you're closed one weekend, and open for a
+market on a Wednesday.
+
+The bulk buttons under each month keep the ordinary case quick: open September,
+tap **Weekends**, and all eight dates are selected. Then tap any single date to
+switch it off. Tapping a bulk button again when every matching date is already
+selected clears them, so it doubles as an undo.
 
 ## Backups matter
 
@@ -47,10 +58,10 @@ For each vacancy it ranks everyone who is eligible by
 2. longest since they last worked — spread the days out
 3. name — a stable tiebreak, so the result never changes between runs
 
-and takes the top candidate. It enforces weekly availability, away dates,
-"never together" pairs, an optional per-person cap, and one shift per person per
-day. Anything it can't satisfy becomes a note on the roster instead of a silent
-gap.
+and takes the top candidate. It takes the exact dates picked on the calendar and enforces weekly
+availability, away dates, "never together" pairs, an optional per-person cap,
+and one shift per person per day. Anything it can't satisfy becomes a note on
+the roster instead of a silent gap.
 
 It was ported from the original Python version and produces byte-identical
 output; `tests/scheduler.test.mjs` is the ported test suite that proves it.

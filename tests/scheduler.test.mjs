@@ -143,6 +143,50 @@ test('empty inputs return a roster carrying a note instead of crashing', () => {
   }
 });
 
+test('an explicit date list rosters exactly those dates', () => {
+  // The calendar picks arbitrary dates, including ones no weekday rule would
+  // produce - a cafe skips one weekend and adds a Wednesday market.
+  const people = ['Alice', 'Bob'].map((n, i) => person(i + 1, n));
+  const dates = ['2026-06-06', '2026-06-07', '2026-06-20', '2026-06-24'];
+  const r = buildRoster({
+    orgId: 1, name: 't', people, shifts: [shift(1, 'Day', 1)], clashes: [], dates,
+  });
+  assert.deepEqual([...new Set(r.assignments.map((a) => a.date))].sort(), dates);
+  assert.deepEqual(r.days, dates);
+  assert.equal(r.startDate, '2026-06-06');
+  assert.equal(r.endDate, '2026-06-24');
+});
+
+test('an explicit date list is de-duplicated and sorted', () => {
+  const people = [person(1, 'Alice')];
+  const r = buildRoster({
+    orgId: 1, name: 't', people, shifts: [shift(1, 'Day', 1)], clashes: [],
+    dates: ['2026-06-10', '2026-06-02', '2026-06-10'],
+  });
+  assert.deepEqual(r.days, ['2026-06-02', '2026-06-10']);
+});
+
+test('no dates picked is reported rather than crashing', () => {
+  const r = buildRoster({
+    orgId: 1, name: 't', people: [person(1, 'Alice')],
+    shifts: [shift(1, 'Day', 1)], clashes: [], dates: [],
+  });
+  assert.equal(r.assignments.length, 0);
+  assert.ok(r.notes.length > 0);
+});
+
+test('constraints still apply when dates come from the calendar', () => {
+  // Alice is weekends-only; the picked list includes a Wednesday she can't do.
+  const alice = person(1, 'Alice', [5, 6]);
+  const bob = person(2, 'Bob');
+  const r = buildRoster({
+    orgId: 1, name: 't', people: [alice, bob], shifts: [shift(1, 'Day', 1)], clashes: [],
+    dates: ['2026-06-06', '2026-06-10'],          // Sat, Wed
+  });
+  const aliceDates = r.assignments.filter((a) => a.personId === 1).map((a) => a.date);
+  assert.ok(!aliceDates.includes('2026-06-10'), 'Alice cannot work the Wednesday');
+});
+
 test('the text table carries headers, names and the summary', () => {
   const people = [person(1, 'Alice'), person(2, 'Bob')];
   const shifts = [

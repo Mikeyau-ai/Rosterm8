@@ -220,6 +220,36 @@ button:focus-visible {
   background: var(--accent); color: var(--accent-in); border-color: transparent;
 }
 
+/* ── calendar ────────────────────────────────────────────────────────── */
+.cal { display: flex; flex-direction: column; gap: .55rem; }
+.cal-head { display: flex; align-items: center; gap: .5rem; }
+.cal-head .btn { flex: none; min-width: 44px; font-size: 1.15rem; line-height: 1; }
+.cal-month { flex: 1; text-align: center; font-weight: 650; }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-dow {
+  text-align: center; font-size: .72rem; font-weight: 700;
+  color: var(--ink-faint); padding-bottom: .15rem;
+}
+.cal-blank { aspect-ratio: 1; }
+.cal-day {
+  aspect-ratio: 1; min-height: 38px;
+  display: grid; place-items: center;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  font: inherit; font-size: .92rem; font-variant-numeric: tabular-nums;
+  cursor: pointer; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.cal-day:active { transform: translateY(1px); }
+/* Today gets a ring rather than a fill, so it never reads as "selected". */
+.cal-day.is-today { border-color: var(--accent); border-width: 2px; }
+.cal-day[aria-pressed="true"] {
+  background: var(--accent); color: var(--accent-in);
+  border-color: transparent; font-weight: 700;
+}
+.cal-bulk { flex-wrap: wrap; }
+
 /* ── lists ───────────────────────────────────────────────────────────── */
 .list { display: flex; flex-direction: column; gap: .5rem; }
 .item {

@@ -1,25 +1,30 @@
 /**
- * Roster screen: the app's home screen. Pick a date range and days of the
- * week, build a roster, then save/copy/share it. This is the single most
- * used screen, so the common weekend-cafe case (Sat+Sun, a fortnight out)
- * is the default and building must take as few taps as possible on a phone.
+ * Roster screen: the app's home screen. Tap the dates to roster on the
+ * calendar, build a roster, then save/copy/share it. This is the single most
+ * used screen, so the common weekend-cafe case stays quick: the month's
+ * "Weekends" button fills a month in one tap, and individual dates can then
+ * be switched off for the weekends the cafe is closed.
  */
 import { store } from '../store.js';
 import {
-  buildRoster, dateRange, formatTable, counts, formatDate, toDays, fromDays,
+  buildRoster, formatTable, counts, formatDate, toDays, fromDays,
 } from '../scheduler.js';
 import { parseAvailability, describe, AIError } from '../ai.js';
 import {
-  el, fill, toast, confirmDialog, weekdayPicker, copyText, emptyState,
+  el, fill, toast, confirmDialog, calendarPicker, copyText, emptyState,
 } from '../ui.js';
 import { show } from '../app.js';
 
 // The most recently built roster, kept across re-renders (e.g. after Save)
 // so the result isn't lost. `days` is the exact list of rostered dates used
-// to build it, kept alongside since a saved roster does not store weekdays.
-// Cleared whenever the current organisation changes.
+// to build it. Cleared whenever the current organisation changes.
 let built = null;
 let builtOrgId = null;
+
+// The calendar selection, likewise kept across re-renders so building or
+// saving doesn't clear the dates the user just tapped.
+let picked = new Set();
+let pickedOrgId = null;
 
 /** Today's date as "YYYY-MM-DD". */
 function todayISO() {
@@ -35,51 +40,61 @@ export function render(container) {
   }
 
   const start = todayISO();
-  const end = fromDays(toDays(start) + 13);
 
   const nameInput = el('input', {
     type: 'text', value: `Roster ${formatDate(start, { withWeekday: false })}`,
   });
-  const startInput = el('input', { type: 'date', value: start });
-  const endInput = el('input', { type: 'date', value: end });
+  // The dates to roster, chosen on the calendar. Kept across re-renders of the
+  // result section so a build doesn't wipe the selection.
+  if (pickedOrgId !== org.id) {
+    picked = new Set();
+    pickedOrgId = org.id;
+  }
 
-  // Keep the suggested name in step with the start date, but stop the moment
-  // the user types their own - a roster they named "Christmas" must not get
-  // silently renamed when they nudge the dates.
+  const summary = el('div', { className: 'faint' });
+  const clearBtn = el('button', {
+    type: 'button', className: 'btn btn-sm', textContent: 'Clear',
+    onclick: () => { picked.clear(); refreshCalendar(); },
+  });
+
+  /** Update the "N dates picked" line and the suggested roster name. */
+  const refreshSummary = () => {
+    const n = picked.size;
+    const sorted = [...picked].sort();
+    summary.textContent = n === 0
+      ? 'Tap the dates you want rostered.'
+      : n === 1
+        ? `1 date picked — ${formatDate(sorted[0])}`
+        : `${n} dates picked — ${formatDate(sorted[0], { withWeekday: false })} to ` +
+          `${formatDate(sorted[n - 1], { withWeekday: false })}`;
+    clearBtn.disabled = n === 0;
+
+    // Keep the suggested name in step with the first date, but stop the moment
+    // the user types their own - a roster they named "Christmas" must not get
+    // silently renamed when they nudge the dates.
+    if (nameIsAuto) {
+      nameInput.value = `Roster ${formatDate(sorted[0] || start, { withWeekday: false })}`;
+    }
+  };
+
+  const calendarWrap = el('div');
+  /** Rebuild the calendar (needed after Clear changes the selection wholesale). */
+  const refreshCalendar = () => {
+    fill(calendarWrap, calendarPicker(picked, refreshSummary));
+    refreshSummary();
+  };
+
   let nameIsAuto = true;
   nameInput.addEventListener('input', () => { nameIsAuto = false; });
-  startInput.addEventListener('change', () => {
-    if (nameIsAuto && startInput.value) {
-      nameInput.value = `Roster ${formatDate(startInput.value, { withWeekday: false })}`;
-    }
-  });
 
-  // The scheduler wants a Set of 0-6 weekday indices; default to the weekend,
-  // since a small church cafe's weekend roster is the primary use case.
-  let weekdaysState = [5, 6];
-  const weekdaysWrap = el('div');
-  /** Redraw the weekday chips from `weekdaysState` (needed since presets change it programmatically). */
-  const renderWeekdayPicker = () => {
-    fill(weekdaysWrap, weekdayPicker(weekdaysState, (sel) => { weekdaysState = sel; }));
-  };
-  renderWeekdayPicker();
-
-  /** Build a preset button that sets `weekdaysState` to a fixed day list. */
-  const preset = (label, days) => el('button', {
-    type: 'button', className: 'btn btn-sm', textContent: label,
-    onclick: () => { weekdaysState = days.slice(); renderWeekdayPicker(); },
-  });
-  const presets = el('div', { className: 'row-tight' }, [
-    preset('Weekend', [5, 6]),
-    preset('Weekdays', [0, 1, 2, 3, 4]),
-    preset('Every day', [0, 1, 2, 3, 4, 5, 6]),
-  ]);
+  refreshCalendar();
 
   const activePeople = store.people().filter((p) => p.active);
   const shifts = store.shifts();
   const readiness = el('div', {
     className: 'faint',
-    textContent: `${activePeople.length} people · ${shifts.length} shifts`,
+    textContent: `${activePeople.length} ${activePeople.length === 1 ? 'person' : 'people'} · ` +
+                 `${shifts.length} ${shifts.length === 1 ? 'shift' : 'shifts'}`,
   });
 
   const errDiv = el('div', { className: 'err' });
@@ -93,22 +108,20 @@ export function render(container) {
   /** Build the roster from the current form values and show the result. */
   const onBuild = () => {
     errDiv.textContent = '';
-    if (!startInput.value || !endInput.value) {
-      errDiv.textContent = 'Pick a start and end date.';
+    if (picked.size === 0) {
+      errDiv.textContent = 'Pick at least one date on the calendar.';
       return;
     }
-    const weekdaysSet = new Set(weekdaysState);
+    const dates = [...picked].sort();
     const roster = buildRoster({
       orgId: org.id,
-      name: nameInput.value.trim() || `Roster ${formatDate(startInput.value, { withWeekday: false })}`,
+      name: nameInput.value.trim() || `Roster ${formatDate(dates[0], { withWeekday: false })}`,
       people: store.people(),
       shifts: store.shifts(),
       clashes: store.clashes(),
-      start: startInput.value,
-      end: endInput.value,
-      weekdays: weekdaysSet,
+      dates,
     });
-    built = { roster, days: dateRange(startInput.value, endInput.value, weekdaysSet) };
+    built = { roster, days: dates };
     renderResults();
   };
 
@@ -140,11 +153,11 @@ export function render(container) {
 
   const formCard = el('div', { className: 'card' }, [
     el('div', {}, [el('label', { className: 'label', textContent: 'Roster name' }), nameInput]),
-    el('div', { className: 'grid-2' }, [
-      el('div', {}, [el('label', { className: 'label', textContent: 'Start' }), startInput]),
-      el('div', {}, [el('label', { className: 'label', textContent: 'End' }), endInput]),
+    el('div', {}, [
+      el('label', { className: 'label', textContent: 'Dates to roster' }),
+      calendarWrap,
+      el('div', { className: 'spread', style: 'margin-top:.6rem' }, [summary, clearBtn]),
     ]),
-    el('div', {}, [el('label', { className: 'label', textContent: 'Days to roster' }), weekdaysWrap, presets]),
     readiness,
     errDiv,
     buildControl,
@@ -180,8 +193,11 @@ function availabilityDetails(container) {
     try {
       const people = store.people();
       const names = people.map((p) => p.name);
-      const start = todayISO();
-      const end = fromDays(toDays(start) + 13);
+      // Give the model the period actually being rostered, so "away the first
+      // weekend" resolves against those dates rather than an arbitrary window.
+      const sorted = [...picked].sort();
+      const start = sorted[0] || todayISO();
+      const end = sorted[sorted.length - 1] || fromDays(toDays(start) + 13);
       const result = await parseAvailability({ text: textarea.value, names, start, end, provider, model, apiKey });
       const lines = describe(result);
       if (lines.length === 0) {

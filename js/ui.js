@@ -5,6 +5,7 @@
  * a handful of functions over plain DOM beats pulling in a dependency that has
  * to be cached, updated and understood.
  */
+import { weekdayOf } from './scheduler.js';
 
 /** Weekday labels, Monday-first, matching the scheduler's 0-6 indices. */
 export const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -166,6 +167,127 @@ export function weekdayPicker(selected, onChange) {
     });
     wrap.append(chip);
   });
+  return wrap;
+}
+
+/** Month names for the calendar header. */
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                     'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * A tappable month calendar for choosing exactly which dates to roster.
+ *
+ * Rosters in the real world are not a clean weekday pattern - a cafe skips the
+ * weekend it's closed and adds the odd Christmas market - so the dates are
+ * picked individually rather than derived from a rule. The per-month bulk
+ * buttons keep the common case ("every weekend in September") down to one tap.
+ *
+ * `selected` is a Set of "YYYY-MM-DD" strings, mutated in place; `onChange` is
+ * called after every change with that Set, so the caller can update its count.
+ */
+export function calendarPicker(selected, onChange) {
+  const wrap = el('div', { className: 'cal' });
+
+  // The month on show. Starts on whatever the user already picked, so
+  // re-opening a part-built roster lands where they left off.
+  const first = [...selected].sort()[0] || new Date().toISOString().slice(0, 10);
+  let [year, month] = first.split('-').map(Number);   // month is 1-12 here
+
+  /** Toggle one date and tell the caller. */
+  const toggle = (iso) => {
+    if (selected.has(iso)) selected.delete(iso); else selected.add(iso);
+    onChange(selected);
+  };
+
+  /** Every date in the displayed month falling on one of `weekdays` (Mon=0). */
+  const monthDatesFor = (weekdays) => {
+    const out = [];
+    const total = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    for (let d = 1; d <= total; d++) {
+      const iso = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (weekdays.includes(weekdayOf(iso))) out.push(iso);
+    }
+    return out;
+  };
+
+  /** Add every matching date in this month, or remove them if all are already on. */
+  const bulk = (weekdays) => {
+    const dates = monthDatesFor(weekdays);
+    const allOn = dates.every((d) => selected.has(d));
+    for (const d of dates) {
+      if (allOn) selected.delete(d); else selected.add(d);
+    }
+    onChange(selected);
+    draw();
+  };
+
+  /** Step the displayed month by `delta` months. */
+  const shiftMonth = (delta) => {
+    month += delta;
+    if (month < 1) { month = 12; year -= 1; }
+    if (month > 12) { month = 1; year += 1; }
+    draw();
+  };
+
+  /** Redraw the whole calendar for the current month. */
+  function draw() {
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const firstISO = `${year}-${String(month).padStart(2, '0')}-01`;
+    const leading = weekdayOf(firstISO);          // blank cells before the 1st
+
+    const header = el('div', { className: 'cal-head' }, [
+      el('button', {
+        type: 'button', className: 'btn btn-sm', textContent: '‹',
+        'aria-label': 'Previous month', onclick: () => shiftMonth(-1),
+      }),
+      el('div', { className: 'cal-month', textContent: `${MONTH_NAMES[month - 1]} ${year}` }),
+      el('button', {
+        type: 'button', className: 'btn btn-sm', textContent: '›',
+        'aria-label': 'Next month', onclick: () => shiftMonth(1),
+      }),
+    ]);
+
+    const grid = el('div', { className: 'cal-grid' });
+    // Two letters, not one: "T" and "S" appear twice each, so single initials
+    // make Tue/Thu and Sat/Sun indistinguishable at a glance.
+    for (const label of DAY_LABELS) {
+      grid.append(el('div', { className: 'cal-dow', textContent: label.slice(0, 2) }));
+    }
+    for (let i = 0; i < leading; i++) {
+      grid.append(el('div', { className: 'cal-blank' }));
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const cell = el('button', {
+        type: 'button',
+        className: `cal-day${iso === todayISO ? ' is-today' : ''}`,
+        textContent: String(d),
+        'aria-pressed': selected.has(iso) ? 'true' : 'false',
+        'aria-label': iso,
+      });
+      cell.addEventListener('click', () => {
+        toggle(iso);
+        cell.setAttribute('aria-pressed', selected.has(iso) ? 'true' : 'false');
+      });
+      grid.append(cell);
+    }
+
+    const bulkRow = el('div', { className: 'row-tight cal-bulk' }, [
+      el('button', { type: 'button', className: 'btn btn-sm', textContent: 'Saturdays',
+                     onclick: () => bulk([5]) }),
+      el('button', { type: 'button', className: 'btn btn-sm', textContent: 'Sundays',
+                     onclick: () => bulk([6]) }),
+      el('button', { type: 'button', className: 'btn btn-sm', textContent: 'Weekends',
+                     onclick: () => bulk([5, 6]) }),
+      el('button', { type: 'button', className: 'btn btn-sm', textContent: 'Weekdays',
+                     onclick: () => bulk([0, 1, 2, 3, 4]) }),
+    ]);
+
+    fill(wrap, [header, grid, bulkRow]);
+  }
+
+  draw();
   return wrap;
 }
 

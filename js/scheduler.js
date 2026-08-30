@@ -142,8 +142,16 @@ function pick(day, people, usedToday, placedIds, incompatible, worked, lastWorke
  * availability at all - is pushed onto `roster.notes` instead of being silently
  * dropped, so the UI can surface it next to the result.
  */
-export function buildRoster({ orgId, name, people, shifts, clashes, start, end, weekdays }) {
-  const days = dateRange(start, end, weekdays);
+export function buildRoster({ orgId, name, people, shifts, clashes, start, end, weekdays, dates }) {
+  // `dates` is the canonical input: the exact days to roster, as chosen on the
+  // calendar. start/end/weekdays remain supported as a shorthand that derives
+  // the same list, which is what the test suite and older saved rosters use.
+  // Presence, not length, picks the branch - an empty `dates` means "nothing
+  // selected" and must report that, not silently fall back to a date range
+  // whose bounds were never supplied.
+  const days = Array.isArray(dates)
+    ? [...new Set(dates)].sort()
+    : dateRange(start, end, weekdays);
   const roster = {
     orgId,
     name,
@@ -162,7 +170,9 @@ export function buildRoster({ orgId, name, people, shifts, clashes, start, end, 
   // something to work with.
   const roll = people.filter((p) => p.active);
   if (days.length === 0) {
-    roster.notes.push('No rostered days fall in the selected date range.');
+    roster.notes.push(dates
+      ? 'No dates picked on the calendar.'
+      : 'No rostered days fall in the selected date range.');
     return roster;
   }
   if (shifts.length === 0) {
