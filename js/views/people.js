@@ -113,18 +113,44 @@ function renderEditor(id, container) {
     },
   });
 
-  return [header, nameCard, availCard, maxCard, awayCard, clashCard, deleteBtn];
+  // Everything already saves as you go, so Save is really "I'm done here" -
+  // but it still commits the text fields first, so a value typed and never
+  // blurred is kept, and it refuses to leave on a bad max-shifts value rather
+  // than dropping it silently.
+  const saveBtn = el('button', {
+    className: 'btn btn-primary btn-block btn-lg', textContent: 'Save',
+    onclick: () => {
+      nameCard.commit();
+      if (!maxCard.commit()) return;
+      toast(`${store.people().find((p) => p.id === id)?.name || 'Person'} saved`);
+      back();
+    },
+  });
+
+  return [
+    header, nameCard.node, availCard, maxCard.node, awayCard, clashCard,
+    saveBtn, deleteBtn,
+  ];
 }
 
-/** Card: name text field and the active/inactive toggle. */
+/**
+ * Card: name text field and the active/inactive toggle.
+ *
+ * Returns `{ node, commit }`. Fields still save on blur, but Save calls
+ * `commit()` too so a value typed and never blurred is not lost.
+ */
 function renderNameCard(person) {
+  /** Save the typed name, falling back to the existing one if it's blank. */
+  const commit = () => {
+    const value = nameInput.value.trim();
+    if (value) store.updatePerson(person.id, { name: value });
+    else nameInput.value = person.name;
+    return true;
+  };
+
   const nameInput = el('input', {
     type: 'text', value: person.name,
-    onblur: () => {
-      const value = nameInput.value.trim();
-      if (value) store.updatePerson(person.id, { name: value });
-      else nameInput.value = person.name;
-    },
+    onblur: commit,
   });
 
   const activeCheckbox = el('input', {
@@ -132,7 +158,7 @@ function renderNameCard(person) {
     onchange: () => store.updatePerson(person.id, { active: activeCheckbox.checked }),
   });
 
-  return el('div', { className: 'card' }, [
+  const node = el('div', { className: 'card' }, [
     el('div', {}, [el('label', { className: 'label', textContent: 'Name' }), nameInput]),
     el('label', { className: 'row-tight' }, [
       activeCheckbox,
@@ -143,6 +169,8 @@ function renderNameCard(person) {
       textContent: 'Inactive people are kept on the list but are never rostered.',
     }),
   ]);
+
+  return { node, commit };
 }
 
 /** Card: the weekday picker for standing availability. */
@@ -156,7 +184,12 @@ function renderAvailabilityCard(person, container) {
   ]);
 }
 
-/** Card: max shifts per roster, validated as blank or a positive integer. */
+/**
+ * Card: max shifts per roster, validated as blank or a positive integer.
+ *
+ * Returns `{ node, commit }`; `commit()` is false when the value is invalid,
+ * so Save can keep the user on the screen instead of discarding what they typed.
+ */
 function renderMaxShiftsCard(person) {
   const input = el('input', {
     type: 'number', min: '1', step: '1',
@@ -164,27 +197,33 @@ function renderMaxShiftsCard(person) {
   });
   const err = el('div', { className: 'err' });
 
-  input.addEventListener('blur', () => {
+  /** Validate and save the cap. Returns false (and shows why) if unusable. */
+  const commit = () => {
     const raw = input.value.trim();
     if (raw === '') {
       err.textContent = '';
       store.updatePerson(person.id, { maxShifts: null });
-      return;
+      return true;
     }
     const n = Number(raw);
     if (!Number.isInteger(n) || n <= 0) {
       err.textContent = 'Enter a positive whole number, or leave blank for no cap.';
-      return;
+      return false;
     }
     err.textContent = '';
     store.updatePerson(person.id, { maxShifts: n });
-  });
+    return true;
+  };
 
-  return el('div', { className: 'card' }, [
+  input.addEventListener('blur', commit);
+
+  const node = el('div', { className: 'card' }, [
     el('label', { className: 'label', textContent: 'Max shifts per roster' }),
     input,
     err,
   ]);
+
+  return { node, commit };
 }
 
 /** Card: away-date (blackout) ranges, with add/remove. */
