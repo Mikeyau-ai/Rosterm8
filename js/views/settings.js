@@ -266,8 +266,28 @@ function renderBackupCard(container) {
       if (!ok) return;
       try {
         const text = await file.text();
-        store.importJSON(text);
+        const { syncCode } = store.importJSON(text);
         importErr.textContent = '';
+
+        // A backup taken while sync was on carries the code too. Adopting it
+        // is what makes this a full recovery rather than a copy that the
+        // server has never heard of - but it is asked, not assumed, because it
+        // points this device at a different database.
+        if (syncCode && sync.normaliseCode(syncCode) !== sync.currentCode()) {
+          const adopt = await confirmDialog(
+            'Use the sync code from this backup?',
+            'This backup was made on a device with sync switched on. Using its code '
+            + 'reconnects this device to that same synced data — which is what you '
+            + 'want when replacing a lost phone.',
+            'Use it'
+          );
+          if (adopt) {
+            sync.setDisabled(false);
+            sync.setCode(syncCode);
+            sync.acknowledgeCode();      // they clearly have a copy of it
+          }
+        }
+
         refreshOrgs();
         toast('Backup restored');
         show('roster');
@@ -281,7 +301,14 @@ function renderBackupCard(container) {
     className: 'btn btn-primary btn-block', textContent: 'Export backup',
     onclick: () => {
       const date = new Date().toISOString().slice(0, 10);
-      downloadText(`rosterm8-backup-${date}.json`, store.exportJSON(), 'application/json');
+      // Include the sync code so one file restores the data *and* the identity
+      // the server knows this device by.
+      const code = sync.currentCode();
+      downloadText(
+        `rosterm8-backup-${date}.json`,
+        store.exportJSON(code ? { syncCode: sync.formatCode(code) } : {}),
+        'application/json'
+      );
       toast('Backup downloaded');
     },
   });
@@ -499,8 +526,34 @@ function renderSyncCard(container) {
           + 'else has ever had it.',
       }),
     ]),
+    // Getting the code into email is the practical answer to "what if I lose
+    // the phone": email already has its own account recovery, so borrowing it
+    // gives a way back in without the server ever being able to read anything.
+    el('button', {
+      className: 'btn btn-primary btn-block', textContent: 'Send this code to myself',
+      onclick: async () => {
+        const body = `Rosterm8 sync code: ${shown}\n\n`
+          + 'Keep this. It is the only key to your rosters — entering it in Rosterm8 '
+          + 'on a new phone brings everything back. Nobody can recover it for you, '
+          + 'not even whoever runs the server, because nobody else has ever had it.';
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: 'Rosterm8 sync code', text: body });
+          } else {
+            // No share sheet (most desktop browsers): hand it to the mail client.
+            window.location.href = `mailto:?subject=${encodeURIComponent('Rosterm8 sync code')}`
+              + `&body=${encodeURIComponent(body)}`;
+          }
+          sync.acknowledgeCode();
+          redraw();
+        } catch (e) {
+          if (e && e.name === 'AbortError') return;   // they closed the sheet
+          copyText(shown);
+        }
+      },
+    }),
     sync.codeAcknowledged() ? null : el('button', {
-      className: 'btn btn-primary btn-block', textContent: 'I have written it down',
+      className: 'btn btn-block', textContent: 'I have written it down',
       onclick: () => {
         sync.acknowledgeCode();
         toast('Thanks — that reminder will stop now');

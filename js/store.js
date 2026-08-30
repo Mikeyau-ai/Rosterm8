@@ -479,10 +479,13 @@ export const store = {
    * This is the backup: browser storage can be cleared by the browser itself,
    * so an occasional export to Files/Drive is the only real safety net.
    */
-  exportJSON() {
+  exportJSON(extra = {}) {
     this.data.lastBackup = new Date().toISOString();
     this.save();
-    return JSON.stringify(this.data, null, 2);
+    // `extra` carries the sync code. A backup that restores the data but not
+    // the identity would leave you looking at your rosters on a device the
+    // server has never heard of - so the file holds both.
+    return JSON.stringify({ ...this.data, ...extra }, null, 2);
   },
 
   /**
@@ -521,10 +524,14 @@ export const store = {
     if (!parsed || !Array.isArray(parsed.orgs) || !Array.isArray(parsed.people)) {
       throw new Error("That doesn't look like a Rosterm8 backup.");
     }
-    this.data = { ...emptyData(), ...parsed };
-    this.data.settings = { ...emptyData().settings, ...(parsed.settings || {}) };
+    // The sync code rides along in the file but is not part of the database;
+    // the caller decides whether to adopt it.
+    const { syncCode, ...data } = parsed;
+    this.data = { ...emptyData(), ...data };
+    this.data.settings = { ...emptyData().settings, ...(data.settings || {}) };
     if (!this.save()) throw new Error('Restored, but saving to this device failed.');
     this.load();
+    return { syncCode: typeof syncCode === 'string' ? syncCode : null };
   },
 
   /** Wipe everything on this device. Used by Settings > Delete all data. */
