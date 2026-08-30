@@ -96,11 +96,38 @@ export const store = {
 
   /** Create an organisation, select it, and return it. */
   addOrg(name) {
-    const org = { id: newId(), name: name.trim() };
+    const org = {
+      id: newId(),
+      name: name.trim(),
+      // Open every day until told otherwise, so nothing is greyed out on the
+      // calendar before the user has actually said when they're open.
+      openDays: [0, 1, 2, 3, 4, 5, 6],
+      openTime: '',
+      closeTime: '',
+    };
     this.data.orgs.push(org);
     this.data.currentOrgId = org.id;
     this.save();
     return org;
+  },
+
+  /** Apply a patch to one organisation (opening days, hours, name). */
+  updateOrg(id, patch) {
+    const org = this.data.orgs.find((o) => o.id === id);
+    if (org) Object.assign(org, patch);
+    this.save();
+  },
+
+  /**
+   * The weekdays the current organisation is open, as an array of 0-6.
+   *
+   * Organisations created before opening days existed have no such field, and
+   * a restored backup may not either - treat those as open every day, which is
+   * the same as "not configured" and greys nothing out.
+   */
+  openDays() {
+    const org = this.currentOrg();
+    return Array.isArray(org?.openDays) ? org.openDays : [0, 1, 2, 3, 4, 5, 6];
   },
 
   /** Rename an organisation in place. */

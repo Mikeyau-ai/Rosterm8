@@ -125,6 +125,13 @@ async function onOrgChange(event) {
 /** Register the service worker so the app opens with no connection. */
 function registerWorker() {
   if (!('serviceWorker' in navigator)) return;
+
+  // Not during local development: the worker serves the previous version from
+  // its cache on first load, so an edit appears not to have taken effect. That
+  // is the right behaviour for an installed app and the wrong one at a code
+  // editor. Offline is verified against the deployed site instead.
+  if (['localhost', '127.0.0.1', '::1'].includes(location.hostname)) return;
+
   // Registration failure is not fatal - the app still works online - so this
   // must never surface an error to the user.
   navigator.serviceWorker.register('sw.js').catch(() => {});

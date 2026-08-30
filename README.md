@@ -29,6 +29,17 @@ its own icon, and it works with no signal.
 4. **Roster** — tap the dates you want on the calendar, press **Build**. Save
    it, copy it, or share it straight into a message.
 
+### Opening days and hours
+
+Set these once in **Settings → This organisation**:
+
+- **Open on** — the days you normally trade. Everything else is dimmed on the
+  roster calendar, and an **All open days** shortcut appears. Dimmed, not
+  blocked: you can still pick a closed day for a one-off, and it shows dashed
+  so it's obvious it's an exception.
+- **Opening hours** — used to fill in the times when you add a new shift, so
+  the usual case needs no typing.
+
 ### Picking dates
 
 The calendar takes exact dates rather than a repeating rule, because real
@@ -36,9 +47,18 @@ rosters aren't a clean pattern — you're closed one weekend, and open for a
 market on a Wednesday.
 
 The bulk buttons under each month keep the ordinary case quick: open September,
-tap **Weekends**, and all eight dates are selected. Then tap any single date to
-switch it off. Tapping a bulk button again when every matching date is already
-selected clears them, so it doubles as an undo.
+tap **All open days**, and every trading day that month is selected. Then tap
+any single date to switch it off. Tapping a bulk button again when every
+matching date is already selected clears them, so it doubles as an undo.
+
+### Repeating weekly
+
+Tick **Repeat weekly** and the pattern you picked in the first week carries
+forward — set it either as a number of weeks or as an end date, whichever suits;
+the two stay in step.
+
+It's recalculated each time rather than only added to, so dropping 12 weeks to 4
+takes the later dates back off again. Unticking returns you to the first week.
 
 ## Backups matter
 
@@ -90,11 +110,16 @@ key; you just tick the days yourself.
 It's a static site with no build step. Any static server will do:
 
 ```bash
-python -m http.server 8000
+python dev-server.py
 ```
 
-Then open `http://localhost:8000`. A plain `file://` open won't work — ES modules
-and the service worker both need a real origin.
+Then open `http://localhost:8123`. A plain `file://` open won't work — ES modules
+need a real origin.
+
+`dev-server.py` exists rather than `python -m http.server` because that sends no
+cache headers, so browsers hold on to stale JavaScript after an edit and it looks
+like your change did nothing. The service worker is also skipped on localhost for
+the same reason — offline is verified against the deployed site.
 
 ## Layout
 

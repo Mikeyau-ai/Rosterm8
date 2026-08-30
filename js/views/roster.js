@@ -80,7 +80,7 @@ export function render(container) {
   const calendarWrap = el('div');
   /** Rebuild the calendar (needed after Clear changes the selection wholesale). */
   const refreshCalendar = () => {
-    fill(calendarWrap, calendarPicker(picked, refreshSummary));
+    fill(calendarWrap, calendarPicker(picked, refreshSummary, { openDays: store.openDays() }));
     refreshSummary();
   };
 

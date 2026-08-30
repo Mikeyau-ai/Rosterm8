@@ -4,7 +4,7 @@
  */
 import { store } from '../store.js';
 import { PROVIDERS } from '../ai.js';
-import { el, fill, toast, promptText, confirmDialog, downloadText } from '../ui.js';
+import { el, fill, toast, promptText, confirmDialog, downloadText, weekdayPicker } from '../ui.js';
 import { show, refreshOrgs } from '../app.js';
 
 const THEME_KEY = 'rosterm8.theme';
@@ -73,7 +73,53 @@ function renderOrgCard() {
   return el('div', { className: 'card' }, [
     el('h3', { textContent: 'This organisation' }),
     el('div', { className: 'row-tight' }, [nameInput, saveBtn]),
+    renderOpeningHours(org),
     deleteBtn,
+  ]);
+}
+
+/**
+ * Opening days and hours for the current organisation.
+ *
+ * The days drive the calendar on the Roster screen - anything outside them is
+ * dimmed, and an "All open days" shortcut appears. The hours are used to
+ * pre-fill the times when a new shift is added, so the common case needs no
+ * typing.
+ */
+function renderOpeningHours(org) {
+  const openTime = el('input', { type: 'time', value: org.openTime || '' });
+  const closeTime = el('input', { type: 'time', value: org.closeTime || '' });
+
+  /** Persist whichever hour field changed. */
+  const saveHours = () => {
+    store.updateOrg(org.id, { openTime: openTime.value, closeTime: closeTime.value });
+  };
+  openTime.addEventListener('change', saveHours);
+  closeTime.addEventListener('change', saveHours);
+
+  const daysWrap = el('div');
+  fill(daysWrap, weekdayPicker(store.openDays(), (days) => {
+    store.updateOrg(org.id, { openDays: days });
+  }));
+
+  return el('div', {}, [
+    el('label', { className: 'label', textContent: 'Open on' }),
+    daysWrap,
+    el('div', {
+      className: 'faint',
+      textContent: 'Days you are closed are dimmed on the roster calendar. You can still pick them for a one-off.',
+      style: 'margin-top:.35rem',
+    }),
+    el('label', { className: 'label', textContent: 'Opening hours', style: 'margin-top:.8rem' }),
+    el('div', { className: 'grid-2' }, [
+      el('div', {}, [el('label', { className: 'faint', textContent: 'Opens' }), openTime]),
+      el('div', {}, [el('label', { className: 'faint', textContent: 'Closes' }), closeTime]),
+    ]),
+    el('div', {
+      className: 'faint',
+      textContent: 'Used to fill in the times when you add a new shift.',
+      style: 'margin-top:.35rem',
+    }),
   ]);
 }
 

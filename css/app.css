@@ -242,13 +242,50 @@ button:focus-visible {
   -webkit-tap-highlight-color: transparent;
 }
 .cal-day:active { transform: translateY(1px); }
+
+/* Days the organisation is normally shut: recede into the background so the
+   open days read as the obvious choice. Still tappable - opening specially for
+   a market day is a real thing - so this stays a hint, not a disabled state. */
+.cal-day.is-closed {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-faint);
+}
+
 /* Today gets a ring rather than a fill, so it never reads as "selected". */
 .cal-day.is-today { border-color: var(--accent); border-width: 2px; }
+
+/* Selection wins over everything, including the closed-day dimming. */
 .cal-day[aria-pressed="true"] {
   background: var(--accent); color: var(--accent-in);
   border-color: transparent; font-weight: 700;
 }
+/* A picked day that is normally closed is worth calling out - it's an
+   exception the user deliberately made. */
+.cal-day.is-closed[aria-pressed="true"] {
+  background: var(--accent-lo); color: var(--accent);
+  border: 1px dashed var(--accent);
+}
 .cal-bulk { flex-wrap: wrap; }
+
+.cal-repeat {
+  display: flex; flex-direction: column; gap: .3rem;
+  padding-top: .55rem; border-top: 1px solid var(--line);
+}
+.cal-repeat .row-tight { flex-wrap: wrap; }
+.cal-repeat label { font-size: .92rem; cursor: pointer; }
+.cal-repeat input[type="checkbox"] {
+  width: 20px; height: 20px; flex: none; accent-color: var(--accent); cursor: pointer;
+}
+.cal-repeat input:disabled + label { color: var(--ink-faint); cursor: default; }
+
+.cal-repeat-fields { display: flex; flex-wrap: wrap; gap: .5rem .9rem; }
+/* An author `display` beats the UA stylesheet's [hidden] rule, so the
+   attribute has to be honoured explicitly or the fields never hide. */
+.cal-repeat-fields[hidden] { display: none; }
+.cal-repeat-fields .row-tight { flex: 1 1 9rem; }
+.cal-repeat-fields input[type="number"] { width: 4.5rem; flex: none; min-height: 38px; }
+.cal-repeat-fields input[type="date"] { flex: 1 1 8rem; min-height: 38px; }
 
 /* ── lists ───────────────────────────────────────────────────────────── */
 .list { display: flex; flex-direction: column; gap: .5rem; }

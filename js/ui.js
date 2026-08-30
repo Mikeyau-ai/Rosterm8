@@ -5,7 +5,7 @@
  * a handful of functions over plain DOM beats pulling in a dependency that has
  * to be cached, updated and understood.
  */
-import { weekdayOf } from './scheduler.js';
+import { weekdayOf, toDays, fromDays, formatDate } from './scheduler.js';
 
 /** Weekday labels, Monday-first, matching the scheduler's 0-6 indices. */
 export const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -184,9 +184,16 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
  *
  * `selected` is a Set of "YYYY-MM-DD" strings, mutated in place; `onChange` is
  * called after every change with that Set, so the caller can update its count.
+ *
+ * `openDays` (0-6, Monday=0) dims the days the organisation is normally shut.
+ * Dimmed, not disabled: a cafe that opens specially for a Christmas market
+ * still needs to roster that day, so the styling is a hint, never a barrier.
  */
-export function calendarPicker(selected, onChange) {
+export function calendarPicker(selected, onChange, { openDays = [0, 1, 2, 3, 4, 5, 6] } = {}) {
   const wrap = el('div', { className: 'cal' });
+  const isOpenDay = (iso) => openDays.includes(weekdayOf(iso));
+  // Only worth offering an "Open days" shortcut when that differs from "all".
+  const hasOpeningPattern = openDays.length > 0 && openDays.length < 7;
 
   // The month on show. Starts on whatever the user already picked, so
   // re-opening a part-built roster lands where they left off.
@@ -197,6 +204,7 @@ export function calendarPicker(selected, onChange) {
   const toggle = (iso) => {
     if (selected.has(iso)) selected.delete(iso); else selected.add(iso);
     onChange(selected);
+    refreshRepeat();      // the repeat pattern is derived from the selection
   };
 
   /** Every date in the displayed month falling on one of `weekdays` (Mon=0). */
@@ -220,6 +228,158 @@ export function calendarPicker(selected, onChange) {
     onChange(selected);
     draw();
   };
+
+  // ── repeat weekly ────────────────────────────────────────────────────
+  // The calendar alone would mean one bulk tap per month for a roster that
+  // runs all year. This projects the first week's pattern forward instead,
+  // the way a calendar app repeats an event.
+  const repeatCheck = el('input', { type: 'checkbox', id: 'cal-repeat' });
+  const repeatWeeks = el('input', { type: 'number', min: '1', max: '104', value: '12' });
+  const repeatUntil = el('input', { type: 'date' });
+  const repeatNote = el('div', { className: 'faint cal-repeat-note' });
+  const repeatFields = el('div', { className: 'cal-repeat-fields', hidden: true });
+
+  // The two boxes are two views of one setting, so editing either updates the
+  // other. The guard stops that mutual update bouncing back and forth.
+  let syncing = false;
+
+  /** The selected dates, sorted ascending. */
+  const sortedSelection = () => [...selected].sort();
+
+  /**
+   * The weekday pattern to repeat: the weekdays picked within seven days of
+   * the earliest selection. Using just the first week means adding a one-off
+   * date months later doesn't silently join the repeat.
+   */
+  const seedPattern = () => {
+    const picked = sortedSelection();
+    if (picked.length === 0) return { from: null, weekdays: [] };
+    const from = picked[0];
+    const lastOfWeek = toDays(from) + 6;
+    const weekdays = [...new Set(
+      picked.filter((d) => toDays(d) <= lastOfWeek).map(weekdayOf)
+    )].sort();
+    return { from, weekdays };
+  };
+
+  /**
+   * Rebuild the selection as the first week's pattern repeated forward.
+   *
+   * Recomputed from scratch rather than only added to, so shortening the range
+   * takes dates away again - otherwise dropping 12 weeks to 4 would leave the
+   * later dates stranded in the roster.
+   */
+  const applyRepeat = () => {
+    const { from, weekdays } = seedPattern();
+    if (!from || weekdays.length === 0 || !repeatUntil.value) return;
+
+    const lastOfSeedWeek = toDays(from) + 6;
+    for (const d of [...selected]) {
+      if (toDays(d) > lastOfSeedWeek) selected.delete(d);
+    }
+
+    const end = toDays(repeatUntil.value);
+    for (let n = toDays(from); n <= end; n++) {
+      const iso = fromDays(n);
+      if (weekdays.includes(weekdayOf(iso))) selected.add(iso);
+    }
+    onChange(selected);
+    draw();
+  };
+
+  /** Trim the selection back to its first week when repeating is switched off. */
+  const clearRepeat = () => {
+    const picked = sortedSelection();
+    if (picked.length === 0) return;
+    const lastOfWeek = toDays(picked[0]) + 6;
+    for (const d of picked) if (toDays(d) > lastOfWeek) selected.delete(d);
+    onChange(selected);
+    draw();
+  };
+
+  /** Set the "until" date from the week count, measured off the first date. */
+  const weeksToUntil = () => {
+    const { from } = seedPattern();
+    const weeks = Math.max(1, Math.min(104, Number(repeatWeeks.value) || 1));
+    if (!from) return;
+    syncing = true;
+    repeatUntil.value = fromDays(toDays(from) + weeks * 7 - 1);
+    syncing = false;
+  };
+
+  /** Set the week count from the "until" date, rounding up a part week. */
+  const untilToWeeks = () => {
+    const { from } = seedPattern();
+    if (!from || !repeatUntil.value) return;
+    const span = toDays(repeatUntil.value) - toDays(from) + 1;
+    syncing = true;
+    repeatWeeks.value = String(Math.max(1, Math.ceil(span / 7)));
+    syncing = false;
+  };
+
+  /** Update the repeat row's visibility and explanatory line. */
+  const refreshRepeat = () => {
+    const { from, weekdays } = seedPattern();
+    repeatCheck.disabled = weekdays.length === 0;
+    repeatFields.hidden = !repeatCheck.checked;
+
+    if (weekdays.length === 0) {
+      repeatNote.textContent = 'Pick a date first, then repeat it weekly.';
+    } else if (!repeatCheck.checked) {
+      repeatNote.textContent = '';
+    } else if (!repeatUntil.value) {
+      repeatNote.textContent = 'Choose how long to repeat for.';
+    } else {
+      const names = weekdays.map((d) => DAY_LABELS[d]).join(', ');
+      repeatNote.textContent =
+        `Every ${names} from ${formatDate(from, { withWeekday: false })} ` +
+        `until ${formatDate(repeatUntil.value, { withWeekday: false })}.`;
+    }
+  };
+
+  repeatCheck.addEventListener('change', () => {
+    if (repeatCheck.checked) {
+      // One tap should do something useful, so fall back to the week count.
+      if (!repeatUntil.value) weeksToUntil();
+      applyRepeat();
+    } else {
+      clearRepeat();
+    }
+    refreshRepeat();
+  });
+  repeatWeeks.addEventListener('input', () => {
+    if (syncing) return;
+    weeksToUntil();
+    applyRepeat();
+    refreshRepeat();
+  });
+  repeatUntil.addEventListener('change', () => {
+    if (syncing) return;
+    untilToWeeks();
+    applyRepeat();
+    refreshRepeat();
+  });
+
+  fill(repeatFields, [
+    el('div', { className: 'row-tight' }, [
+      el('label', { className: 'faint', textContent: 'for' }),
+      repeatWeeks,
+      el('label', { className: 'faint', textContent: 'weeks' }),
+    ]),
+    el('div', { className: 'row-tight' }, [
+      el('label', { className: 'faint', textContent: 'until' }),
+      repeatUntil,
+    ]),
+  ]);
+
+  const repeatRow = el('div', { className: 'cal-repeat' }, [
+    el('div', { className: 'row-tight' }, [
+      repeatCheck,
+      el('label', { htmlFor: 'cal-repeat', textContent: 'Repeat weekly' }),
+    ]),
+    repeatFields,
+    repeatNote,
+  ]);
 
   /** Step the displayed month by `delta` months. */
   const shiftMonth = (delta) => {
@@ -259,12 +419,13 @@ export function calendarPicker(selected, onChange) {
     }
     for (let d = 1; d <= daysInMonth; d++) {
       const iso = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const closed = !isOpenDay(iso);
       const cell = el('button', {
         type: 'button',
-        className: `cal-day${iso === todayISO ? ' is-today' : ''}`,
+        className: `cal-day${iso === todayISO ? ' is-today' : ''}${closed ? ' is-closed' : ''}`,
         textContent: String(d),
         'aria-pressed': selected.has(iso) ? 'true' : 'false',
-        'aria-label': iso,
+        'aria-label': closed ? `${iso} (normally closed)` : iso,
       });
       cell.addEventListener('click', () => {
         toggle(iso);
@@ -273,7 +434,13 @@ export function calendarPicker(selected, onChange) {
       grid.append(cell);
     }
 
+    // Once opening days are set they are almost always what you want to pick,
+    // so that shortcut leads and the generic ones fall in behind it.
     const bulkRow = el('div', { className: 'row-tight cal-bulk' }, [
+      hasOpeningPattern
+        ? el('button', { type: 'button', className: 'btn btn-sm btn-primary',
+                         textContent: 'All open days', onclick: () => bulk(openDays) })
+        : null,
       el('button', { type: 'button', className: 'btn btn-sm', textContent: 'Saturdays',
                      onclick: () => bulk([5]) }),
       el('button', { type: 'button', className: 'btn btn-sm', textContent: 'Sundays',
@@ -282,9 +449,10 @@ export function calendarPicker(selected, onChange) {
                      onclick: () => bulk([5, 6]) }),
       el('button', { type: 'button', className: 'btn btn-sm', textContent: 'Weekdays',
                      onclick: () => bulk([0, 1, 2, 3, 4]) }),
-    ]);
+    ].filter(Boolean));
 
-    fill(wrap, [header, grid, bulkRow]);
+    fill(wrap, [header, grid, bulkRow, repeatRow]);
+    refreshRepeat();
   }
 
   draw();

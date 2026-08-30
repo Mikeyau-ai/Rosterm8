@@ -9,6 +9,12 @@ import { store } from '../store.js';
 import { el, fill, confirmDialog } from '../ui.js';
 
 /** Entry point: render the shift list into `container`. */
+/** Times a new shift should start with: the organisation's opening hours if set. */
+function defaultTimes() {
+  const org = store.currentOrg();
+  return { start: org?.openTime || '', end: org?.closeTime || '' };
+}
+
 export function render(container) {
   const header = el('div', {}, [
     el('h2', { textContent: 'Shifts' }),
@@ -27,7 +33,9 @@ export function render(container) {
       el('button', {
         className: 'btn btn-primary btn-block', textContent: '+ Add shift',
         onclick: () => {
-          store.addShift({ name: 'Cafe', start: '08:00', end: '12:00', headcount: 2 });
+          const t = defaultTimes();
+          store.addShift({ name: 'Cafe', start: t.start || '08:00',
+                           end: t.end || '12:00', headcount: 2 });
           render(container);
         },
       }),
@@ -43,7 +51,8 @@ export function render(container) {
   nodes.push(el('button', {
     className: 'btn btn-primary btn-block', textContent: '+ Add shift',
     onclick: () => {
-      store.addShift({ name: 'Shift', start: '', end: '', headcount: 1 });
+      const t = defaultTimes();
+      store.addShift({ name: 'Shift', start: t.start, end: t.end, headcount: 1 });
       render(container);
     },
   }));

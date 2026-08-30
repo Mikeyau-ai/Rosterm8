@@ -4,7 +4,7 @@
     {
       "name": "rosterm8",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8123"],
+      "runtimeArgs": ["dev-server.py", "8123"],
       "port": 8123
     }
   ]
