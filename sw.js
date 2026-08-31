@@ -1,16 +1,22 @@
 /**
  * Service worker: makes Rosterm8 open with no connection.
  *
- * Strategy is cache-first for the app shell, because the shell is small, fully
- * static and versioned by CACHE below — a roster built in a cafe basement with
- * no signal must still work. Bumping CACHE on deploy is what ships an update:
- * the new worker precaches the new files and deletes every older cache.
+ * Strategy is stale-while-revalidate for the app shell: answer instantly from
+ * cache so a roster can be built in a cafe basement with no signal, but always
+ * re-fetch in the background. When that background fetch turns up a changed
+ * shell file (a deploy landed), the worker messages the open pages so they can
+ * reload onto it, instead of the change only taking effect on the next cold
+ * start. CACHE is bumped only to force-drop a bad cache; freshness no longer
+ * depends on remembering to.
  *
  * Only same-origin GETs are touched. The AI provider calls in js/ai.js are
  * cross-origin and must always go to the network, never to a cache.
  */
 
 const CACHE = 'rosterm8-v1';
+
+/** Pathnames (relative to scope) that make up the precached app shell. */
+const SHELL_PATHS = new Set();
 
 /** Everything needed to boot the app with no network. */
 const SHELL = [
@@ -34,6 +40,26 @@ const SHELL = [
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
+
+for (const entry of SHELL) SHELL_PATHS.add(new URL(entry, self.location).pathname);
+
+/**
+ * Whether two responses for the same URL are different builds of that file.
+ * GitHub Pages sends a strong ETag (and Last-Modified) on every asset, so a
+ * header comparison is enough - no need to read and diff the bodies.
+ */
+function isNewerCopy(cached, fresh) {
+  const tag = (r, h) => r && r.headers.get(h);
+  const oldTag = tag(cached, 'ETag') || tag(cached, 'Last-Modified');
+  const newTag = tag(fresh, 'ETag') || tag(fresh, 'Last-Modified');
+  return Boolean(oldTag && newTag && oldTag !== newTag);
+}
+
+/** Tell every open page that a precached shell file has just changed. */
+async function notifyShellUpdated() {
+  const clients = await self.clients.matchAll({ type: 'window' });
+  for (const client of clients) client.postMessage('shell-updated');
+}
 
 self.addEventListener('install', (event) => {
   // addAll is atomic: if any file 404s the whole install fails, which is what
@@ -69,7 +95,15 @@ self.addEventListener('fetch', (event) => {
 
       const network = fetch(request)
         .then((response) => {
-          if (response.ok && response.type === 'basic') cache.put(request, response.clone());
+          if (response.ok && response.type === 'basic') {
+            // A shell file whose bytes changed under us means a deploy has
+            // landed. Let the running pages reload onto it rather than waiting
+            // for the next cold start.
+            if (hit && SHELL_PATHS.has(url.pathname) && isNewerCopy(hit, response)) {
+              notifyShellUpdated();
+            }
+            cache.put(request, response.clone());
+          }
           return response;
         })
         .catch(() => null);

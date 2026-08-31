@@ -151,9 +151,36 @@ function registerWorker() {
   // editor. Offline is verified against the deployed site instead.
   if (['localhost', '127.0.0.1', '::1'].includes(location.hostname)) return;
 
+  // The worker refreshes its cache in the background (stale-while-revalidate),
+  // but without this the new code only runs on the next cold start - so a phone
+  // that is opened, glanced at and pocketed keeps showing the old version for
+  // days. Reload once, the moment the worker says it has pulled a newer copy of
+  // the app itself.
+  let reloading = false;
+  const reloadOnce = () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  };
+
+  // Sent by sw.js when it replaces a precached shell file with a changed one.
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data === 'shell-updated') reloadOnce();
+  });
+
+  // A brand-new worker took control. Ignored on a first-ever visit (there was
+  // no controller to replace), where it just means the worker has claimed the
+  // page rather than that anything changed.
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.addEventListener('controllerchange', reloadOnce);
+  }
+
   // Registration failure is not fatal - the app still works online - so this
-  // must never surface an error to the user.
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // must never surface an error to the user. Ask for an update check on every
+  // launch rather than waiting for the browser's own schedule.
+  navigator.serviceWorker.register('sw.js')
+    .then((reg) => reg.update())
+    .catch(() => {});
 }
 
 /** Wire everything up and show the first screen. */

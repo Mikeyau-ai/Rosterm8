@@ -176,6 +176,7 @@ Hosted on GitHub Pages straight from the default branch. Push, and the site
 updates; there is nothing to build and nothing to install.
 
 The service worker serves the cached copy first and refreshes in the
-background, so an installed copy picks up a change on the **second** open,
-not the first. Add any new file to the `SHELL` list in `sw.js` so it is
-available offline.
+background. When that background refresh finds a changed file, the open page
+reloads itself onto the new version, so a deploy shows up within a few seconds
+of the app being opened rather than only on the next cold start. Add any new
+file to the `SHELL` list in `sw.js` so it is available offline.
