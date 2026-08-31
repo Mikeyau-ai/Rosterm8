@@ -9,7 +9,7 @@
 import { store } from '../store.js';
 import { formatDate } from '../scheduler.js';
 import {
-  el, fill, toast, promptText, confirmDialog, promptDateRange, weekdayPicker,
+  el, fill, toast, promptText, confirmDialog, promptDateRange, weekdayPicker, monthGrid,
 } from '../ui.js';
 
 // Id of the person currently open in the editor, or null when showing the list.
@@ -99,6 +99,7 @@ function renderEditor(id, container) {
 
   const nameCard = renderNameCard(person);
   const availCard = renderAvailabilityCard(person, container);
+  const wantedCard = renderWantedDatesCard(person, container);
   const maxCard = renderMaxShiftsCard(person);
   const awayCard = renderAwayCard(person, container);
   const clashCard = renderClashCard(person, container);
@@ -128,7 +129,7 @@ function renderEditor(id, container) {
   });
 
   return [
-    header, nameCard.node, availCard, maxCard.node, awayCard, clashCard,
+    header, nameCard.node, availCard, wantedCard, maxCard.node, awayCard, clashCard,
     saveBtn, deleteBtn,
   ];
 }
@@ -194,6 +195,60 @@ function renderAvailabilityCard(person, container) {
     el('label', { className: 'label', textContent: 'Available on' }),
     picker,
     hint,
+  ]);
+}
+
+/**
+ * Card: specific dates this person has asked to work.
+ *
+ * A request is a preference, not a rule: it puts them first in the queue for
+ * that day, but a hard constraint or a full shift still wins. The same list is
+ * editable on the New Roster screen; this card is for when you already know
+ * ("Sarah wants the 12th") and don't have a roster open yet.
+ */
+function renderWantedDatesCard(person, container) {
+  const today = new Date().toISOString().slice(0, 10);
+  const summary = el('div', { className: 'faint' });
+
+  // Open on the month of the earliest upcoming request, else this month.
+  const upcoming = (person.requests || []).filter((d) => d >= today).sort();
+  const startMonth = upcoming[0] || today;
+
+  /** Highlight class for one day: a request, an away date, or nothing. */
+  const classOf = (iso) => {
+    const state = store.dateState(person.id, iso);
+    if (state === 'wants') return 'is-want';
+    if (state === 'cant' || state === 'cant-range') return 'is-away';
+    return '';
+  };
+
+  /** Say how many days are picked, so the card reads at a glance. */
+  const refreshSummary = () => {
+    const n = (person.requests || []).length;
+    summary.textContent = n === 0
+      ? 'None picked. Tap the days they have asked to work.'
+      : `${n} day${n === 1 ? '' : 's'} picked — they go first in the queue for those.`;
+  };
+
+  const onTap = (iso) => {
+    // An away date wins: toggling a request under it would be a confusing
+    // half-state, so send the user to the Away card instead.
+    if (store.dateState(person.id, iso).startsWith('cant')) {
+      toast('They have an away date then — clear it below to ask them to work.');
+      return;
+    }
+    store.toggleRequest(person.id, iso);
+    cal.redraw();
+    refreshSummary();
+  };
+
+  const cal = monthGrid({ start: startMonth, openDays: store.openDays(), classOf, onTap });
+  refreshSummary();
+
+  return el('div', { className: 'card' }, [
+    el('label', { className: 'label', textContent: 'Asked to work' }),
+    cal.node,
+    summary,
   ]);
 }
 
@@ -277,7 +332,7 @@ function renderAwayCard(person, container) {
   const addBtn = el('button', {
     className: 'btn btn-sm', textContent: '+ Add away dates',
     onclick: async () => {
-      const result = await promptDateRange('Away dates');
+      const result = await promptDateRange('Away dates', { openDays: store.openDays() });
       if (!result) return;
       store.addBlackout(person.id, result.start, result.end, result.reason);
       render(container);

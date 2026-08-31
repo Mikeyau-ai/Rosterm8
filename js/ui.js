@@ -120,35 +120,71 @@ export function confirmDialog(title, message, confirmLabel = 'Delete') {
 }
 
 /**
- * Ask for a date range plus an optional reason, for adding an away period.
+ * Ask for an away period plus an optional reason, by tapping a calendar.
+ *
+ * The old two-input "From / To" form made the common single day take two
+ * fields and a mental check that To wasn't before From. Here the first tap is
+ * the start, a later tap closes the range, an earlier tap moves the start, and
+ * one tap on its own is a single day.
+ *
  * Resolves to { start, end, reason } or null.
  */
-export function promptDateRange(title) {
+export function promptDateRange(title, { openDays = [0, 1, 2, 3, 4, 5, 6] } = {}) {
   return dialog((close) => {
     const today = new Date().toISOString().slice(0, 10);
-    const start = el('input', { type: 'date', value: today });
-    const end = el('input', { type: 'date', value: today });
-    const reason = el('input', { type: 'text', placeholder: 'Holiday, course, ...' });
-    const err = el('div', { className: 'err' });
+    let startISO = null;
+    let endISO = null;
 
-    const submit = () => {
-      if (!start.value) { err.textContent = 'Pick a start date.'; return; }
-      // A single-day absence is the common case, so an empty end means "same day".
-      const to = end.value || start.value;
-      close({ start: start.value, end: to, reason: reason.value.trim() });
+    const reason = el('input', { type: 'text', placeholder: 'Holiday, course, ...' });
+    const summary = el('div', { className: 'faint' });
+    const addBtn = el('button', { className: 'btn btn-primary', textContent: 'Add', disabled: true });
+
+    /** Highlight class for one day, given the current start/end selection. */
+    const classOf = (iso) => {
+      if (!startISO) return '';
+      if (!endISO) return iso === startISO ? 'in-range range-edge' : '';
+      if (iso === startISO || iso === endISO) return 'in-range range-edge';
+      return iso > startISO && iso < endISO ? 'in-range' : '';
     };
 
+    /** First tap sets the start; a later tap closes the range; an earlier one restarts it. */
+    const onTap = (iso) => {
+      if (!startISO || endISO) { startISO = iso; endISO = null; }
+      else if (iso < startISO) { startISO = iso; }
+      else if (iso !== startISO) { endISO = iso; }
+      refresh();
+    };
+
+    const cal = monthGrid({ start: today, openDays, classOf, onTap });
+
+    /** Redraw the grid and update the summary line and Add button. */
+    const refresh = () => {
+      cal.redraw();
+      addBtn.disabled = !startISO;
+      if (!startISO) summary.textContent = 'Tap the first day away.';
+      else if (!endISO) {
+        summary.textContent = `Away ${formatDate(startISO, { withWeekday: true })}`
+          + ' — tap a later day for a range.';
+      } else {
+        summary.textContent = `Away ${formatDate(startISO, { withWeekday: false })}`
+          + ` – ${formatDate(endISO, { withWeekday: false })}`;
+      }
+    };
+
+    addBtn.addEventListener('click', () => {
+      if (!startISO) return;
+      close({ start: startISO, end: endISO || startISO, reason: reason.value.trim() });
+    });
+
+    refresh();
     return [
       el('h2', { textContent: title }),
-      el('div', { className: 'grid-2' }, [
-        el('div', {}, [el('label', { className: 'label', textContent: 'From' }), start]),
-        el('div', {}, [el('label', { className: 'label', textContent: 'To' }), end]),
-      ]),
+      cal.node,
+      summary,
       el('div', {}, [el('label', { className: 'label', textContent: 'Reason (optional)' }), reason]),
-      err,
       el('div', { className: 'modal-actions' }, [
         el('button', { className: 'btn', textContent: 'Cancel', onclick: () => close(null) }),
-        el('button', { className: 'btn btn-primary', textContent: 'Add', onclick: submit }),
+        addBtn,
       ]),
     ];
   });
@@ -181,6 +217,74 @@ export function weekdayPicker(selected, onChange) {
 /** Month names for the calendar header. */
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
                      'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * A bare month calendar: a prev/next header and a 7-column grid of day cells.
+ *
+ * No bulk buttons, no repeat row - just tapping days. Shared by the away-date
+ * picker and the per-person requested-dates card, which both want "tap the
+ * days you mean" and nothing more.
+ *
+ * `classOf(iso)` returns extra CSS classes for a cell (or '' for none), so the
+ * caller owns what "selected" looks like. `onTap(iso)` fires on every tap - the
+ * caller updates its own state and calls the returned `redraw()`. `openDays`
+ * (0-6, Mon=0) dims normally-closed days. `start` is the month shown first.
+ *
+ * Returns `{ node, redraw }`.
+ */
+export function monthGrid({ start, openDays = [0, 1, 2, 3, 4, 5, 6], classOf, onTap }) {
+  const wrap = el('div', { className: 'cal' });
+  let [year, month] = (start || new Date().toISOString().slice(0, 10)).split('-').map(Number);
+
+  /** Step the displayed month by `delta` months, wrapping the year. */
+  const shiftMonth = (delta) => {
+    month += delta;
+    if (month < 1) { month = 12; year -= 1; }
+    if (month > 12) { month = 1; year += 1; }
+    draw();
+  };
+
+  /** Redraw the header and grid for the current month. */
+  function draw() {
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const firstISO = `${year}-${String(month).padStart(2, '0')}-01`;
+    const leading = weekdayOf(firstISO);
+
+    const header = el('div', { className: 'cal-head' }, [
+      el('button', { type: 'button', className: 'btn btn-sm', textContent: '‹',
+                     'aria-label': 'Previous month', onclick: () => shiftMonth(-1) }),
+      el('div', { className: 'cal-month', textContent: `${MONTH_NAMES[month - 1]} ${year}` }),
+      el('button', { type: 'button', className: 'btn btn-sm', textContent: '›',
+                     'aria-label': 'Next month', onclick: () => shiftMonth(1) }),
+    ]);
+
+    const grid = el('div', { className: 'cal-grid' });
+    for (const label of DAY_LABELS) {
+      grid.append(el('div', { className: 'cal-dow', textContent: label.slice(0, 2) }));
+    }
+    for (let i = 0; i < leading; i++) grid.append(el('div', { className: 'cal-blank' }));
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const closed = !openDays.includes(weekdayOf(iso));
+      const extra = classOf(iso);
+      const cell = el('button', {
+        type: 'button',
+        className: `cal-day${iso === todayISO ? ' is-today' : ''}`
+          + `${closed ? ' is-closed' : ''}${extra ? ` ${extra}` : ''}`,
+        textContent: String(d),
+        'aria-label': closed ? `${iso} (normally closed)` : iso,
+      });
+      cell.addEventListener('click', () => onTap(iso));
+      grid.append(cell);
+    }
+
+    fill(wrap, [header, grid]);
+  }
+
+  draw();
+  return { node: wrap, redraw: draw };
+}
 
 /**
  * A tappable month calendar for choosing exactly which dates to roster.
