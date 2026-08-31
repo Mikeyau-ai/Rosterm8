@@ -90,9 +90,10 @@ body {
   overscroll-behavior-y: none;
 }
 
-h1, h2, h3 { margin: 0; line-height: 1.25; text-wrap: balance; }
+h1, h2, h3, h4 { margin: 0; line-height: 1.25; text-wrap: balance; }
 h2 { font-size: 1.15rem; font-weight: 650; }
 h3 { font-size: .95rem; font-weight: 650; }
+h4 { font-size: .9rem; font-weight: 650; }
 p  { margin: 0 0 .75rem; }
 
 .mono {
@@ -267,6 +268,22 @@ button:focus-visible {
   border: 1px dashed var(--accent);
 }
 .cal-bulk { flex-wrap: wrap; }
+
+/* Bare monthGrid selection (away-date picker, "asked to work" card). The
+   caller sets these classes; the grid itself has no aria-pressed state. */
+.cal-day.in-range { background: var(--accent-lo); color: var(--accent); border-color: transparent; }
+.cal-day.range-edge {
+  background: var(--accent); color: var(--accent-in);
+  border-color: transparent; font-weight: 700;
+}
+.cal-day.is-want {
+  background: var(--ok); color: var(--accent-in);
+  border-color: transparent; font-weight: 700;
+}
+.cal-day.is-away {
+  color: var(--bad); border-color: var(--bad);
+  border-style: dashed; text-decoration: line-through;
+}
 
 .cal-repeat {
   display: flex; flex-direction: column; gap: .3rem;

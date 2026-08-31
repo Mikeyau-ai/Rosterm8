@@ -676,10 +676,22 @@ function renderAboutCard() {
     },
   });
 
+  // How it works: the one-time setup, then the build loop.
+  const howSteps = [
+    'Add your people and tick the days each of them can work.',
+    'Set up the shifts a day is made of, and your opening days and hours.',
+    'Note who is away, and any two people who should not be rostered together.',
+    'Pick the dates on the calendar and press Build. Rosterm8 spreads the '
+      + 'shifts fairly, honours every constraint, and says so plainly when it '
+      + 'cannot fill one.',
+  ];
+
   return el('div', { className: 'card' }, [
     el('h3', { textContent: 'About' }),
     el('div', { textContent: 'Rosterm8' }),
     el('div', { className: 'muted', textContent: 'Everything stays on this device.' }),
+    el('h4', { textContent: 'How it works' }),
+    el('ol', { className: 'install-steps' }, howSteps.map((s) => el('li', { textContent: s }))),
     deleteAllBtn,
   ]);
 }
