@@ -7,12 +7,13 @@
  */
 import { store } from '../store.js';
 import {
-  buildRoster, formatTable, counts, formatDate, toDays, fromDays,
+  buildRoster, formatTable, counts, formatDate, toDays, fromDays, auditRoster,
 } from '../scheduler.js';
 import { parseAvailability, describe, AIError } from '../ai.js';
 import {
   el, fill, toast, confirmDialog, calendarPicker, copyText, emptyState,
 } from '../ui.js';
+import { editableDayCards } from './roster-edit.js';
 import { show } from '../app.js';
 
 // The most recently built roster, kept across re-renders (e.g. after Save)
@@ -40,6 +41,10 @@ export function openDraft(id) {
 // Whether the requests/days-off section is expanded, kept across its rebuilds.
 let requestsOpen = false;
 
+// Whether the built roster is in manual-edit mode. Kept across the result
+// section's own re-renders, reset on a full page render (leaving/returning).
+let editing = false;
+
 /** Today's date as "YYYY-MM-DD". */
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -47,6 +52,7 @@ function todayISO() {
 
 /** Entry point: render the build form, optional AI notes box, and any result. */
 export function render(container) {
+  editing = false;                 // a fresh page render always starts read-only
   const org = store.currentOrg();
   if (builtOrgId !== org.id) {
     built = null;
@@ -142,7 +148,7 @@ export function render(container) {
 
   /** Redraw just the result section, without disturbing the form above it. */
   const renderResults = () => {
-    fill(resultsBox, built ? buildResultView(container) : []);
+    fill(resultsBox, built ? buildResultView(container, renderResults) : []);
   };
 
   /** Build the roster from the current form values and show the result. */
@@ -420,7 +426,7 @@ function availabilityDetails(container) {
 }
 
 /** Build the day-by-day result view, tally and action buttons for `built`. */
-function buildResultView(container) {
+function buildResultView(container, rerender) {
   const { roster, days } = built;
   const people = store.people();
   const shifts = store.shifts();
@@ -434,10 +440,23 @@ function buildResultView(container) {
     ]));
   }
 
-  nodes.push(...renderDayCards(roster, people, shifts, days));
+  if (editing) {
+    const apply = (next) => {
+      roster.assignments = next;
+      roster.notes = auditRoster(roster, store.people(), store.shifts());
+      rerender();
+    };
+    nodes.push(...editableDayCards(roster, people, shifts, apply));
+  } else {
+    nodes.push(...renderDayCards(roster, people, shifts, days));
+  }
   nodes.push(renderTally(roster, people));
 
   const actions = [
+    el('button', {
+      className: 'btn', textContent: editing ? 'Done editing' : 'Edit',
+      onclick: () => { editing = !editing; rerender(); },
+    }),
     el('button', {
       className: 'btn btn-primary', textContent: 'Save',
       onclick: () => {

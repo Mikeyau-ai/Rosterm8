@@ -4,14 +4,19 @@
  * the People screen - there is no side-by-side layout on a phone.
  */
 import { store } from '../store.js';
-import { formatTable, counts, formatDate } from '../scheduler.js';
+import { formatTable, counts, formatDate, auditRoster } from '../scheduler.js';
 import { el, fill, toast, confirmDialog, copyText, emptyState } from '../ui.js';
+import { editableDayCards } from './roster-edit.js';
 import { show } from '../app.js';
 import * as builderView from './roster.js';
 import * as sync from '../sync.js';
 
 // Id of the saved roster currently open, or null when showing the list.
 let openId = null;
+
+// Whether the open roster is in manual-edit mode. Reset whenever the list is
+// shown or a different roster is opened.
+let editing = false;
 
 /** Entry point: render the list, or the opened roster, into `container`. */
 export function render(container) {
@@ -35,6 +40,7 @@ export function render(container) {
     fill(container, renderOpen(opened, container));
   } else {
     openId = null;
+    editing = false;
     fill(container, [...backupNudge(), ...renderList(rosters, container)]);
   }
 }
@@ -145,10 +151,25 @@ function renderOpen(roster, container) {
     ]));
   }
 
-  nodes.push(...renderDayCards(roster, people, shifts));
+  if (editing) {
+    const apply = (next) => {
+      store.updateRoster(roster.id, {
+        assignments: next,
+        notes: auditRoster({ ...roster, assignments: next }, store.people(), store.shifts()),
+      });
+      render(container);
+    };
+    nodes.push(...editableDayCards(roster, people, shifts, apply));
+  } else {
+    nodes.push(...renderDayCards(roster, people, shifts));
+  }
   nodes.push(renderTally(roster, people));
 
   const actions = [
+    el('button', {
+      className: 'btn', textContent: editing ? 'Done editing' : 'Edit',
+      onclick: () => { editing = !editing; render(container); },
+    }),
     el('button', {
       className: 'btn', textContent: 'Copy',
       onclick: () => copyText(formatTable(roster, people, shifts)),

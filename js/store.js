@@ -492,6 +492,14 @@ export const store = {
     return saved;
   },
 
+  /** Apply a patch to a saved roster or draft (e.g. manually edited assignments). */
+  updateRoster(id, patch) {
+    const r = this.data.rosters.find((x) => x.id === id);
+    if (!r) return;
+    Object.assign(r, patch, { updatedAt: new Date().toISOString() });
+    this.save();
+  },
+
   /** Delete a saved roster or draft. */
   deleteRoster(id) {
     this.data.rosters = this.data.rosters.filter((r) => r.id !== id);

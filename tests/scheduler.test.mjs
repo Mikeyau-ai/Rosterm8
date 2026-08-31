@@ -200,6 +200,20 @@ test('a requested date puts that person ahead of the queue', () => {
   assert.equal(on2nd.personId, 1, 'Alice asked for the 2nd and should have it');
 });
 
+test('a requested date overrides the standing weekday pattern', () => {
+  // Alice is weekdays-only but has asked for a Saturday one-off; the request is
+  // the more deliberate signal, so she should get it rather than be skipped.
+  const alice = person(1, 'Alice', [0, 1, 2, 3, 4]);
+  const bob = person(2, 'Bob', [0, 1, 2, 3, 4]);
+  alice.requests = ['2026-06-06'];                 // a Saturday
+  const r = buildRoster({
+    orgId: 1, name: 't', people: [alice, bob], shifts: [shift(1, 'Day', 1)],
+    clashes: [], dates: ['2026-06-06'],
+  });
+  assert.equal(r.assignments[0].personId, 1, 'Alice asked for the Saturday');
+  assert.ok(!r.notes.some((n) => n.includes('Alice asked for')), 'and it was granted');
+});
+
 test('a request never overrides a hard constraint', () => {
   // Asking for a day you are away on must not put you on it.
   const alice = person(1, 'Alice');

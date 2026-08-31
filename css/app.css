@@ -394,6 +394,26 @@ button:focus-visible {
 .day-shift .swho { flex: 1; }
 .day-shift .swho.gap { color: var(--warn); font-style: italic; }
 
+/* Manual edit: people become removable chips and each shift gets an add picker. */
+.day-shift .swho.edit {
+  display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; font-style: normal;
+}
+.edit-chip {
+  display: inline-flex; align-items: center; gap: .15rem;
+  padding: .1rem .15rem .1rem .5rem; border-radius: var(--radius-s);
+  background: var(--accent-lo); color: var(--ink); font-size: .82rem;
+}
+.edit-x {
+  border: 0; background: none; cursor: pointer; padding: 0 .3rem;
+  color: var(--ink-dim); font-size: 1.05rem; line-height: 1;
+}
+.edit-x:hover { color: var(--bad); }
+.edit-add {
+  font: inherit; font-size: .82rem; padding: .2rem .3rem;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+}
+
 .tally { display: flex; flex-wrap: wrap; gap: .4rem; }
 .chip {
   padding: .2rem .6rem; border-radius: 999px;

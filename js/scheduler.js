@@ -98,16 +98,22 @@ function clashMap(clashes) {
 }
 
 /**
- * True if a person's standing availability allows working `iso`.
- * Mirrors Person.can_work() from the Python original.
+ * True if a person can work `iso`.
+ *
+ * A blackout is a hard "can't" and always wins. The standing weekday pattern is
+ * the default, but an explicit request for this exact date overrides it: "I
+ * want to work that day" is a stronger, more deliberate signal than "I don't
+ * usually work Saturdays", so a one-off request lets someone work a weekday
+ * their pattern would otherwise exclude.
  */
 export function canWork(person, iso) {
   if (!person.active) return false;
-  if (!person.availableWeekdays.includes(weekdayOf(iso))) return false;
   const n = toDays(iso);
-  return !(person.blackouts || []).some(
-    (b) => toDays(b.start) <= n && n <= toDays(b.end)
-  );
+  if ((person.blackouts || []).some((b) => toDays(b.start) <= n && n <= toDays(b.end))) {
+    return false;
+  }
+  if ((person.requests || []).includes(iso)) return true;
+  return person.availableWeekdays.includes(weekdayOf(iso));
 }
 
 /**
@@ -213,47 +219,71 @@ export function buildRoster({ orgId, name, people, shifts, clashes, start, end, 
         roster.assignments.push({ date: day, shiftId: shift.id, personId: who.id });
       }
 
-      // Report the gap rather than pretending the shift is covered.
-      if (placed < shift.headcount) {
-        roster.notes.push(
-          `${formatDate(day)} - ${shift.name}: only ${placed} of ${shift.headcount} filled ` +
-          `(nobody else was available).`
-        );
+    }
+  }
+
+  roster.notes = auditRoster(roster, roll, shifts);
+  return roster;
+}
+
+/**
+ * Regenerate a roster's notes from its current assignments.
+ *
+ * Run at the end of a build and again after any manual edit, so the "things to
+ * check" list stays true to what the roster actually says now rather than to
+ * how it first came out of the scheduler. Covers: understaffed shifts, requests
+ * that were asked for but not granted, and active people used nowhere.
+ */
+export function auditRoster(roster, people, shifts) {
+  const notes = [];
+  const active = people.filter((p) => p.active);
+  const days = roster.days?.length
+    ? [...roster.days].sort()
+    : [...new Set(roster.assignments.map((a) => a.date))].sort();
+
+  // Understaffed shifts, day by day, in shift order.
+  for (const day of days) {
+    for (const shift of shifts) {
+      const n = roster.assignments.filter(
+        (a) => a.date === day && a.shiftId === shift.id
+      ).length;
+      if (n < shift.headcount) {
+        notes.push(`${formatDate(day)} - ${shift.name}: only ${n} of ${shift.headcount} filled.`);
       }
     }
   }
 
-  // Say so when someone asked for a date and did not get it. Without this the
-  // request would fail silently, and the person who asked would be the one to
-  // discover it.
-  const assignedByPerson = new Map();
+  const datesByPerson = new Map();
   for (const a of roster.assignments) {
-    if (!assignedByPerson.has(a.personId)) assignedByPerson.set(a.personId, new Set());
-    assignedByPerson.get(a.personId).add(a.date);
+    if (!datesByPerson.has(a.personId)) datesByPerson.set(a.personId, new Set());
+    datesByPerson.get(a.personId).add(a.date);
   }
   const rostered = new Set(days);
-  for (const p of roll) {
-    const got = assignedByPerson.get(p.id) || new Set();
-    const missed = (p.requests || []).filter((d) => rostered.has(d) && !got.has(d));
-    for (const date of missed) {
-      roster.notes.push(
-        `${p.name} asked for ${formatDate(date)} but could not be fitted in.`
-      );
+
+  // Requests asked for within the rostered period but not granted.
+  for (const p of active) {
+    const got = datesByPerson.get(p.id) || new Set();
+    for (const date of (p.requests || [])) {
+      if (rostered.has(date) && !got.has(date)) {
+        notes.push(`${p.name} asked for ${formatDate(date)} but could not be fitted in.`);
+      }
     }
   }
 
-  // Flag people the roster never used, which is nearly always a data problem
-  // (no availability ticked, or a blackout covering the whole period).
-  for (const p of roll) {
-    if (worked.get(p.id) === 0) {
-      const reason = p.availableWeekdays.length === 0
-        ? 'no days ticked in their availability'
-        : 'unavailable on every rostered day';
-      roster.notes.push(`${p.name} was not rostered at all - ${reason}.`);
+  // Active people the roster never used. Only worth a note when they *couldn't*
+  // have worked any of these days - no availability ticked, or unavailable on
+  // every one. Someone who could have worked but wasn't picked (fair rotation,
+  // or a deliberate manual edit) is not a problem to flag.
+  for (const p of active) {
+    if (datesByPerson.has(p.id)) continue;
+    if ((p.availableWeekdays || []).length === 0) {
+      notes.push(`${p.name} was not rostered at all - no days ticked in their availability.`);
+    } else if (days.every((d) => !canWork(p, d))) {
+      notes.push(`${p.name} was not rostered at all - unavailable on every rostered day.`);
     }
   }
 
-  return roster;
+  return notes;
 }
 
 /** Shifts worked per person id, for the fairness summary. */
