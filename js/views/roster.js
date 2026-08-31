@@ -26,6 +26,17 @@ let builtOrgId = null;
 let picked = new Set();
 let pickedOrgId = null;
 
+// The draft currently being continued, if any: saving writes back to it
+// instead of making a new entry, and building then saving replaces it.
+// `pendingDraftId` is set by openDraft() and consumed on the next render.
+let draftId = null;
+let pendingDraftId = null;
+
+/** Continue a saved draft: its name and dates load on the next render. */
+export function openDraft(id) {
+  pendingDraftId = id;
+}
+
 // Whether the requests/days-off section is expanded, kept across its rebuilds.
 let requestsOpen = false;
 
@@ -41,18 +52,36 @@ export function render(container) {
     built = null;
     builtOrgId = org.id;
   }
+  // A draft belongs to one organisation; switching away abandons it.
+  if (pickedOrgId !== org.id) draftId = null;
 
   const start = todayISO();
 
-  const nameInput = el('input', {
-    type: 'text', value: `Roster ${formatDate(start, { withWeekday: false })}`,
-  });
+  // Loading a draft: pull its name and dates into the form, then forget the
+  // request so ordinary re-renders (Save, AI apply) don't keep resetting it.
+  if (pendingDraftId != null) {
+    const d = store.roster(pendingDraftId);
+    pendingDraftId = null;
+    if (d && d.draft && d.orgId === org.id) {
+      draftId = d.id;
+      picked = new Set(d.days || []);
+      pickedOrgId = org.id;
+      built = null;
+    }
+  }
+
   // The dates to roster, chosen on the calendar. Kept across re-renders of the
   // result section so a build doesn't wipe the selection.
   if (pickedOrgId !== org.id) {
     picked = new Set();
     pickedOrgId = org.id;
   }
+
+  const draft = draftId != null ? store.roster(draftId) : null;
+  const nameInput = el('input', {
+    type: 'text',
+    value: draft ? draft.name : `Roster ${formatDate(start, { withWeekday: false })}`,
+  });
 
   const summary = el('div', { className: 'faint' });
   const clearBtn = el('button', {
@@ -93,7 +122,9 @@ export function render(container) {
     refreshSummary();
   };
 
-  let nameIsAuto = true;
+  // A draft carries a name the user chose (or accepted), so don't overwrite it
+  // as the dates change; a fresh roster's name tracks the first date until typed.
+  let nameIsAuto = !draft;
   nameInput.addEventListener('input', () => { nameIsAuto = false; });
 
   refreshCalendar();
@@ -134,9 +165,27 @@ export function render(container) {
     renderResults();
   };
 
+  /** Save the current name and dates as a draft, without building. */
+  const onSaveDraft = () => {
+    const dates = [...picked].sort();
+    const name = nameInput.value.trim()
+      || `Roster ${formatDate(dates[0] || start, { withWeekday: false })}`;
+    const rec = store.saveDraft({ id: draftId, name, dates });
+    draftId = rec.id;
+    toast(draft ? 'Draft updated' : 'Draft saved');
+    show('roster');
+  };
+
+  const saveDraftBtn = el('button', {
+    type: 'button', className: 'btn btn-lg',
+    textContent: draft ? 'Update draft' : 'Save draft',
+    onclick: onSaveDraft,
+  });
+
   // The build control is either the big primary button, or - if the org has
   // nothing to schedule yet - a pointer to the screen that fixes it. Either
-  // way the scheduler is never invoked with nothing to work with.
+  // way the scheduler is never invoked with nothing to work with. A draft can
+  // still be saved with nothing set up, so Save draft sits outside this.
   let buildControl;
   if (shifts.length === 0) {
     buildControl = emptyState(
@@ -156,9 +205,36 @@ export function render(container) {
     );
   } else {
     buildControl = el('button', {
-      className: 'btn btn-primary btn-lg btn-block', textContent: 'Build roster', onclick: onBuild,
+      className: 'btn btn-primary btn-lg', textContent: 'Build roster', onclick: onBuild,
     });
   }
+
+  const ready = shifts.length > 0 && activePeople.length > 0;
+  saveDraftBtn.classList.toggle('btn-block', !ready);
+
+  // Actions live at the foot of the page: fill the form top to bottom, then
+  // save it for later or build it. When ready, the two buttons sit side by
+  // side (Save draft left, Build right). When something is still missing, Save
+  // draft stays (a draft needs nothing set up) and the build pointer drops
+  // below, outside the card, as its own block.
+  const actions = ready
+    ? el('div', { className: 'build-actions' }, [saveDraftBtn, buildControl])
+    : saveDraftBtn;
+
+  const deleteDraftBtn = draft ? el('button', {
+    type: 'button', className: 'btn btn-sm btn-danger', textContent: 'Delete draft',
+    style: 'margin-top:.6rem',
+    onclick: async () => {
+      const ok = await confirmDialog('Delete draft?', 'This cannot be undone.', 'Delete');
+      if (!ok) return;
+      store.deleteRoster(draftId);
+      draftId = null;
+      picked.clear();
+      built = null;
+      toast('Draft deleted');
+      show('roster');
+    },
+  }) : null;
 
   const formCard = el('div', { className: 'card' }, [
     el('div', {}, [el('label', { className: 'label', textContent: 'Roster name' }), nameInput]),
@@ -167,13 +243,21 @@ export function render(container) {
       calendarWrap,
       el('div', { className: 'spread', style: 'margin-top:.6rem' }, [summary, clearBtn]),
     ]),
-    readiness,
-    errDiv,
-    buildControl,
+  ]);
+
+  const actionCard = el('div', { className: 'card' }, [
+    readiness, errDiv, actions, deleteDraftBtn,
   ]);
 
   renderResults();
-  fill(container, [formCard, requestsWrap, availabilityDetails(container), resultsBox]);
+  fill(container, [
+    formCard,
+    requestsWrap,
+    availabilityDetails(container),
+    actionCard,
+    ready ? null : buildControl,
+    resultsBox,
+  ]);
 }
 
 /**
@@ -357,6 +441,12 @@ function buildResultView(container) {
     el('button', {
       className: 'btn btn-primary', textContent: 'Save',
       onclick: () => {
+        // Building a draft and saving the result retires the draft: the saved
+        // roster takes its place in the list.
+        if (draftId != null) {
+          store.deleteRoster(draftId);
+          draftId = null;
+        }
         store.saveRoster(roster);
         toast('Saved');
         render(container);

@@ -7,6 +7,7 @@ import { store } from '../store.js';
 import { formatTable, counts, formatDate } from '../scheduler.js';
 import { el, fill, toast, confirmDialog, copyText, emptyState } from '../ui.js';
 import { show } from '../app.js';
+import * as builderView from './roster.js';
 import * as sync from '../sync.js';
 
 // Id of the saved roster currently open, or null when showing the list.
@@ -86,24 +87,44 @@ function backupNudge() {
   ])];
 }
 
-/** Build the list of saved rosters, newest first. */
+/** Build the list of saved rosters and drafts, most recent first. */
 function renderList(rosters, container) {
-  const items = rosters.map((r) => {
-    const shiftsCount = r.assignments.length;
-    return el('button', {
-      type: 'button', className: 'item',
-      onclick: () => { openId = r.id; render(container); },
-    }, [
-      el('div', { className: 'item-main' }, [
-        el('div', { className: 'item-title', textContent: r.name }),
-        el('div', {
-          className: 'item-sub',
-          textContent: `${formatDate(r.startDate, { withWeekday: false })} – ${formatDate(r.endDate, { withWeekday: false })} · ${shiftsCount} shift${shiftsCount === 1 ? '' : 's'} assigned`,
-        }),
-      ]),
-    ]);
-  });
+  const items = rosters.map((r) => (r.draft ? draftRow(r) : savedRow(r, container)));
   return [el('div', { className: 'list' }, items)];
+}
+
+/** A row for a saved roster: opens the read-only day-by-day view. */
+function savedRow(r, container) {
+  const shiftsCount = r.assignments.length;
+  return el('button', {
+    type: 'button', className: 'item',
+    onclick: () => { openId = r.id; render(container); },
+  }, [
+    el('div', { className: 'item-main' }, [
+      el('div', { className: 'item-title', textContent: r.name }),
+      el('div', {
+        className: 'item-sub',
+        textContent: `${formatDate(r.startDate, { withWeekday: false })} – ${formatDate(r.endDate, { withWeekday: false })} · ${shiftsCount} shift${shiftsCount === 1 ? '' : 's'} assigned`,
+      }),
+    ]),
+  ]);
+}
+
+/** A row for a draft: reopens it in the builder to keep working on it. */
+function draftRow(r) {
+  const range = r.startDate
+    ? `${formatDate(r.startDate, { withWeekday: false })} – ${formatDate(r.endDate, { withWeekday: false })}`
+    : 'No dates picked yet';
+  return el('button', {
+    type: 'button', className: 'item',
+    onclick: () => { builderView.openDraft(r.id); show('new'); },
+  }, [
+    el('div', { className: 'item-main' }, [
+      el('div', { className: 'item-title', textContent: r.name }),
+      el('div', { className: 'item-sub', textContent: `${range} · not built yet` }),
+    ]),
+    el('span', { className: 'item-tag', textContent: 'Draft' }),
+  ]);
 }
 
 /** Build the full day-by-day view of one saved roster, plus its actions. */

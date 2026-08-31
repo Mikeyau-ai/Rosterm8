@@ -320,6 +320,17 @@ button:focus-visible {
 .item-title { font-weight: 600; }
 .item-sub { font-size: .84rem; color: var(--ink-dim); }
 .item.inactive .item-title { color: var(--ink-faint); text-decoration: line-through; }
+/* "Draft" marker on an unbuilt roster in the list. */
+.item-tag {
+  flex: none;
+  font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: .15rem .4rem; border-radius: var(--radius-s);
+  background: var(--accent-lo); color: var(--accent);
+}
+
+/* New Roster: Save draft and Build sit side by side at the foot of the page. */
+.build-actions { display: flex; gap: .5rem; }
+.build-actions > .btn { flex: 1; }
 
 /* ── requests / days off ─────────────────────────────────────────────── */
 .req-person { padding-top: .7rem; border-top: 1px solid var(--line); }
