@@ -32,7 +32,9 @@ The app has three sections:
 2. **Settings → Shifts** — the blocks of work a day is made of, e.g. `Cafe 08:00–12:00,
    2 people needed`. They're filled in the order listed.
 3. **Settings → People** — add everyone, tick the days each can work, add any away dates,
-   and set any "never roster these two together" pairs.
+   and set any "never roster these two together" pairs. **Add several** takes a
+   pasted list of names (one per line, with an optional `- Sat, Sun` after each)
+   and then walks you through the day picker for anyone whose days you didn't type.
 4. **New Roster** — tap the dates you want on the calendar, press **Build**.
    Save it, and it appears under **Roster**. You can copy it or share it
    straight into a message.

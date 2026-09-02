@@ -8,16 +8,32 @@
  */
 import { store } from '../store.js';
 import { formatDate } from '../scheduler.js';
+import { parsePeopleList } from '../people-import.js';
 import {
   el, fill, toast, promptText, confirmDialog, promptDateRange, weekdayPicker, monthGrid,
+  dialog, DAY_LABELS,
 } from '../ui.js';
 
 // Id of the person currently open in the editor, or null when showing the list.
 let editingId = null;
 
-/** Entry point: render the list or the editor into `container`. */
+// When walking new people through the day-picker one at a time: the ids still
+// to visit and how far through we are. Null when not in the walk-through.
+let stepIds = null;
+let stepAt = 0;
+
+/** Entry point: render the day walk-through, the editor, or the list. */
 export function render(container) {
-  if (editingId != null && store.people().some((p) => p.id === editingId)) {
+  // Drop anyone deleted mid-walk, and leave the walk if nobody's left.
+  if (stepIds) {
+    stepIds = stepIds.filter((id) => store.people().some((p) => p.id === id));
+    if (stepIds.length === 0) stepIds = null;
+  }
+
+  if (stepIds) {
+    stepAt = Math.max(0, Math.min(stepAt, stepIds.length - 1));
+    fill(container, renderStepper(container));
+  } else if (editingId != null && store.people().some((p) => p.id === editingId)) {
     fill(container, renderEditor(editingId, container));
   } else {
     editingId = null;
@@ -53,9 +69,14 @@ function renderList(container) {
     },
   });
 
+  const addManyBtn = el('button', {
+    className: 'btn btn-sm', textContent: 'Add several',
+    onclick: () => openBulkAdd(container),
+  });
+
   const header = el('div', { className: 'spread' }, [
     el('h2', { textContent: 'People' }),
-    addBtn,
+    el('div', { className: 'row-tight' }, [addManyBtn, addBtn]),
   ]);
 
   const people = store.people();
@@ -66,11 +87,20 @@ function renderList(container) {
         el('div', { textContent: 'No people yet' }),
         el('div', {
           className: 'muted',
-          textContent: 'Add the people you roster, then tick the days each of them can work.',
+          textContent: 'Add them one at a time, or use "Add several" to paste a list of names.',
         }),
       ]),
     ];
   }
+
+  // Shortcut into the day walk-through for everyone still without any days -
+  // the usual state right after a bulk add.
+  const needDays = people.filter((p) => (p.availableWeekdays || []).length === 0);
+  const setDaysBtn = needDays.length ? el('button', {
+    className: 'btn btn-sm btn-block', style: 'margin:.6rem 0',
+    textContent: `Set days for ${needDays.length} ${needDays.length === 1 ? 'person' : 'people'} →`,
+    onclick: () => { stepIds = needDays.map((p) => p.id); stepAt = 0; render(container); },
+  }) : null;
 
   const list = el('div', { className: 'list' }, people.map((p) => {
     const item = el('button', {
@@ -86,7 +116,135 @@ function renderList(container) {
     return item;
   }));
 
-  return [header, list];
+  return [header, setDaysBtn, list];
+}
+
+/**
+ * Bulk add: paste a list of names (one per line, optional "- days" suffix),
+ * review what will be created, then walk anyone without days through the picker.
+ *
+ * This is the offline, keyless sibling of AI assist: `parsePeopleList` does the
+ * reading, and names that already exist in this org are skipped rather than
+ * duplicated.
+ */
+async function openBulkAdd(container) {
+  const created = await bulkAddDialog();
+  if (created && created.length) {
+    const needDays = created.filter((p) => (p.availableWeekdays || []).length === 0);
+    if (needDays.length) { stepIds = needDays.map((p) => p.id); stepAt = 0; }
+  }
+  render(container);
+}
+
+/**
+ * The paste-a-list dialog. Resolves to the array of created people, or null.
+ *
+ * The preview updates as you type so it's clear before committing what each
+ * line will become - a day pattern, "no days", or "already on the list".
+ */
+function bulkAddDialog() {
+  return dialog((close) => {
+    const existing = new Set(store.people().map((p) => p.name.trim().toLowerCase()));
+
+    const textarea = el('textarea', {
+      rows: 7,
+      placeholder: 'Sarah - Sat, Sun\nTom - weekdays\nRachel\nKate - every day',
+    });
+    const preview = el('div', { className: 'list', style: 'max-height:30vh;overflow-y:auto' });
+    const addBtn = el('button', { className: 'btn btn-primary', textContent: 'Add', disabled: true });
+
+    // Entries that will actually be created, kept in sync by refresh().
+    let toAdd = [];
+
+    /** Re-parse the textarea and rebuild the preview and the Add button. */
+    const refresh = () => {
+      const seen = new Set();
+      toAdd = [];
+      const rows = parsePeopleList(textarea.value).map((entry) => {
+        const key = entry.name.toLowerCase();
+        const dup = existing.has(key) || seen.has(key);
+        seen.add(key);
+        if (!dup) toAdd.push(entry);
+
+        let note;
+        if (dup) note = ' — already on the list';
+        else if (entry.weekdays && entry.weekdays.length) {
+          note = ` — ${entry.weekdays.map((d) => DAY_LABELS[d]).join(', ')}`;
+        } else if (entry.weekdays && entry.weekdays.length === 0) note = ' — no days';
+        else note = ' — days not set';
+
+        return el('div', {
+          className: 'faint',
+          style: dup ? 'text-decoration:line-through' : null,
+          textContent: entry.name + note,
+        });
+      });
+      fill(preview, rows);
+      addBtn.disabled = toAdd.length === 0;
+      addBtn.textContent = toAdd.length ? `Add ${toAdd.length}` : 'Add';
+    };
+    textarea.addEventListener('input', refresh);
+
+    addBtn.addEventListener('click', () => {
+      const created = toAdd.map((e) => store.addPerson(e.name, e.weekdays || []));
+      toast(`${created.length} added`);
+      close(created);
+    });
+
+    return [
+      el('h2', { textContent: 'Add several people' }),
+      el('div', {
+        className: 'faint',
+        textContent: 'Paste a list from a message or your notes — one name per line. Put days after a dash if you know them: Mon–Sun, weekdays, weekends, every day.',
+      }),
+      textarea,
+      preview,
+      el('div', { className: 'modal-actions' }, [
+        el('button', { className: 'btn', textContent: 'Cancel', onclick: () => close(null) }),
+        addBtn,
+      ]),
+    ];
+  });
+}
+
+/**
+ * One screen of the day walk-through: the current person's name, the weekday
+ * picker, and Previous / Next (or Done on the last). Days save on every tap,
+ * so "Finish later" simply leaves - nothing is lost.
+ */
+function renderStepper(container) {
+  const person = store.people().find((p) => p.id === stepIds[stepAt]);
+  const leave = () => { stepIds = null; stepAt = 0; render(container); };
+  const last = stepAt === stepIds.length - 1;
+
+  const heading = el('div', { className: 'spread' }, [
+    el('h2', { textContent: 'Set days' }),
+    el('div', { className: 'faint', textContent: `${stepAt + 1} of ${stepIds.length}` }),
+  ]);
+
+  const picker = weekdayPicker(person.availableWeekdays, (days) => {
+    store.updatePerson(person.id, { availableWeekdays: days });
+  });
+
+  const prevBtn = el('button', {
+    className: 'btn', textContent: '← Previous', disabled: stepAt === 0,
+    onclick: () => { stepAt -= 1; render(container); },
+  });
+  const nextBtn = el('button', {
+    className: 'btn btn-primary', textContent: last ? 'Done' : 'Next →',
+    onclick: () => { if (last) { leave(); } else { stepAt += 1; render(container); } },
+  });
+
+  return [
+    heading,
+    el('div', { className: 'card' }, [
+      el('div', { className: 'item-title', textContent: person.name }),
+      picker,
+      el('div', { className: 'faint', textContent: 'Tap the days this person can work. Saved as you go.' }),
+    ]),
+    el('div', { className: 'row-tight' }, [prevBtn, nextBtn]),
+    el('button', { className: 'btn btn-sm', textContent: 'Finish later', onclick: leave }),
+  ];
 }
 
 /** Build the full editor for one person. */

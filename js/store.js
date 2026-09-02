@@ -301,18 +301,20 @@ export const store = {
   },
 
   /**
-   * Add a person with no days ticked, and return them.
+   * Add a person, and return them.
    *
-   * Deliberately nothing rather than everything: assuming a new person can
-   * work any day quietly puts them on shifts nobody agreed to. An empty
-   * pattern makes the roster say "not rostered - no days ticked", which is a
-   * question, where a wrong assumption is a mistake you only spot on the day.
+   * Days default to none, not everything: assuming a new person can work any
+   * day quietly puts them on shifts nobody agreed to. An empty pattern makes
+   * the roster say "not rostered - no days ticked", which is a question, where
+   * a wrong assumption is a mistake you only spot on the day. `availableWeekdays`
+   * is passed only when the user actually stated the days (e.g. typed alongside
+   * the name in a pasted list).
    */
-  addPerson(name) {
+  addPerson(name, availableWeekdays = []) {
     const person = {
       id: newId(), orgId: this.data.currentOrgId,
       name: name.trim(), active: true,
-      availableWeekdays: [],
+      availableWeekdays: [...availableWeekdays],
       blackouts: [], requests: [], maxShifts: null, notes: '',
     };
     this.data.people.push(person);
